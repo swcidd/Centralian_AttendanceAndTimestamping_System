@@ -1,16 +1,16 @@
-import AttendanceRow from "./AttendanceRow";
+import TrackingRow from "./TrackingRow";
 
-type Student = {
+interface Student {
   id: number;
   name: string;
   status: "Present" | "Late" | "Absent" | "Pending";
-};
+}
 
-type Props = {
+interface TrackingTableProps {
   students: Student[];
-};
+}
 
-const AttendanceTable = ({ students }: Props) => {
+const TrackingTable = ({ students }: TrackingTableProps) => {
   return (
     <div className="overflow-hidden rounded-lg border">
       <table className="w-full">
@@ -24,7 +24,7 @@ const AttendanceTable = ({ students }: Props) => {
 
         <tbody>
           {students.map((student) => (
-            <AttendanceRow
+            <TrackingRow
               key={student.id}
               studentName={student.name}
               status={student.status}
@@ -36,4 +36,4 @@ const AttendanceTable = ({ students }: Props) => {
   );
 };
 
-export default AttendanceTable;
+export default TrackingTable;

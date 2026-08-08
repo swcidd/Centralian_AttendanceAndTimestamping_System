@@ -1,7 +1,5 @@
-import { useState } from "react";
-
-import AttendanceFilters from "../components/tracking/AttendanceFilters";
-import AttendanceTable from "../components/tracking/AttendanceTable";
+import TrackingFilters from "../components/tracking/TrackingFilters";
+import TrackingTable from "../components/tracking/TrackingTable";
 
 const students = [
   { id: 1, name: "Student #1", status: "Present" as const },
@@ -15,24 +13,11 @@ const students = [
 ];
 
 const Tracking = () => {
-  const [selectedCourse, setSelectedCourse] = useState("");
-  const [selectedStub, setSelectedStub] = useState("");
-
-  const handleScan = () => {
-    console.log("Start scanning...");
-  };
-
   return (
     <div className="space-y-6">
-      <AttendanceFilters
-        selectedCourse={selectedCourse}
-        selectedStub={selectedStub}
-        onCourseChange={setSelectedCourse}
-        onStubChange={setSelectedStub}
-        onScan={handleScan}
-      />
+      <TrackingFilters />
 
-      <AttendanceTable students={students} />
+      <TrackingTable students={students} />
     </div>
   );
 };

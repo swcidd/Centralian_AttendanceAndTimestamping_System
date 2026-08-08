@@ -1,8 +1,8 @@
-type Props = {
+interface TrackingStatusProps {
   status: "Present" | "Late" | "Absent" | "Pending";
-};
+}
 
-const AttendanceStatus = ({ status }: Props) => {
+const TrackingStatus = ({ status }: TrackingStatusProps) => {
   switch (status) {
     case "Present":
       return <span className="text-green-600">Present ✓</span>;
@@ -18,4 +18,4 @@ const AttendanceStatus = ({ status }: Props) => {
   }
 };
 
-export default AttendanceStatus;
+export default TrackingStatus;

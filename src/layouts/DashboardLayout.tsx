@@ -9,11 +9,11 @@ const DashboardLayout = () => {
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen">
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
       <div className="flex flex-1 flex-col">
         <Topbar toggleSidebar={toggleSidebar} />
-        <main className="flex-5 p-6">
+        <main className="flex-5">
           <Outlet />
         </main>
       </div>

@@ -1,5 +1,6 @@
 import TrackingFilters from "../components/tracking/TrackingFilters";
 import TrackingTable from "../components/tracking/TrackingTable";
+import TrackingButton from "../components/tracking/TrackingButton";
 
 const students = [
   { id: 1, name: "Student #1", status: "Present" as const },
@@ -15,7 +16,10 @@ const students = [
 const Tracking = () => {
   return (
     <div className="space-y-6">
-      <TrackingFilters />
+      <div className="flex items-center justify-between gap-4">
+        <TrackingFilters />
+        <TrackingButton />
+      </div>
 
       <TrackingTable students={students} />
     </div>

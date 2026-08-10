@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { CiMenuBurger } from "react-icons/ci";
-import Sidebar from "./Sidebar";
 
 interface TopbarProps {
   toggleSidebar: () => void;

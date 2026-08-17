@@ -11,12 +11,9 @@ export type Activity = {
 interface ActivityGridProps {
   activities: Activity[];
   onActivitySelect: (id: number) => void;
-};
+}
 
-const ActivityGrid = ({
-  activities,
-  onActivitySelect,
-}: ActivityGridProps) => {
+const ActivityGrid = ({ activities, onActivitySelect }: ActivityGridProps) => {
   return (
     <div className="grid grid-cols-2 gap-8">
       {activities.map((activity) => (

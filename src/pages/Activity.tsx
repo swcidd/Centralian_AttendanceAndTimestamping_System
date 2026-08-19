@@ -4,7 +4,7 @@ import ActivityFilters from "../components/activity/ActivityFilters";
 import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
-import type { Activity } from "../components/activity/ActivityGrid";
+import { Activity } from "../types/types"
 
 const activities: Activity[] = [
   {

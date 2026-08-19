@@ -2,7 +2,7 @@ import CourseToolbar from "../components/courses/CourseToolbar";
 import CourseGrid from "../components/courses/CourseGrid";
 import StudentTrackTable from "../components/courses/StudentTrackTable";
 
-import { Course } from "../components/courses/CourseGrid";
+import { Course } from "../types/types";
 
 const courses: Course[] = [
   {

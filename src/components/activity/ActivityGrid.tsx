@@ -1,12 +1,5 @@
+import { Activity } from "../../types/types";
 import ActivityCard from "./ActivityCard";
-
-export type Activity = {
-  id: number;
-  date: string;
-  present: number;
-  absent: number;
-  late: number;
-};
 
 interface ActivityGridProps {
   activities: Activity[];

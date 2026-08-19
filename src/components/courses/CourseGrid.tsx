@@ -1,11 +1,7 @@
+import { Course } from "../../types/types";
 import CourseCard from "./CourseCard";
 
-export interface Course {
-  stub: number;
-  name: string;
-  schedule: string;
-  instructor: string;
-}
+
 
 interface CourseGridProps {
   courses: Course[];

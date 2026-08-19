@@ -2,7 +2,7 @@ import TrackingStatus from "./TrackingStatus";
 
 interface TrackingRowProps {
   studentName: string;
-  status: "Present" | "Late" | "Absent" | "Pending";
+  status: "Present" | "Late" | "Absent";
 }
 
 const TrackingRow = ({ studentName, status }: TrackingRowProps) => {

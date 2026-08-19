@@ -1,10 +1,5 @@
+import { Student } from "../../types/types";
 import TrackingRow from "./TrackingRow";
-
-interface Student {
-  id: number;
-  name: string;
-  status: "Present" | "Late" | "Absent" | "Pending";
-}
 
 interface TrackingTableProps {
   students: Student[];

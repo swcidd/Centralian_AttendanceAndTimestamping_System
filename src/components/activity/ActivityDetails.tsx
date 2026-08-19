@@ -1,8 +1,4 @@
-type Student = {
-  id: number;
-  name: string;
-  status: "Present" | "Late" | "Absent";
-};
+import { Student } from "../../types/types";
 
 interface ActivityDetailsProps {
   date: string;

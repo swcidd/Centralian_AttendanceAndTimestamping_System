@@ -1,5 +1,5 @@
 interface TrackingStatusProps {
-  status: "Present" | "Late" | "Absent" | "Pending";
+  status: "Present" | "Late" | "Absent";
 }
 
 const TrackingStatus = ({ status }: TrackingStatusProps) => {

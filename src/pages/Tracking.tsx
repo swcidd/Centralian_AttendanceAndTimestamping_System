@@ -6,7 +6,7 @@ const students = [
   { id: 1, name: "Student #1", status: "Present" as const },
   { id: 2, name: "Student #2", status: "Present" as const },
   { id: 3, name: "Student #3", status: "Present" as const },
-  { id: 4, name: "Student #4", status: "Pending" as const },
+  { id: 4, name: "Student #4", status: "Late" as const },
   { id: 5, name: "Student #5", status: "Late" as const },
   { id: 6, name: "Student #6", status: "Present" as const },
   { id: 7, name: "Student #7", status: "Late" as const },

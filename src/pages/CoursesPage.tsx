@@ -47,7 +47,7 @@ const courses: Course[] = [
   },
 ];
 
-const Courses = () => {
+const CoursesPage = () => {
   return (
     <div className="space-y-6">
       <CourseToolbar />
@@ -65,4 +65,4 @@ const Courses = () => {
   );
 };
 
-export default Courses;
+export default CoursesPage;

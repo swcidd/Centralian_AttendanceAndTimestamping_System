@@ -39,28 +39,28 @@ const activities: Activity[] = [
 
 const students = [
   {
-    id: 1,
+    id: "1",
     name: "Student #1",
     status: "Present" as const,
   },
   {
-    id: 2,
+    id: "2",
     name: "Student #2",
     status: "Present" as const,
   },
   {
-    id: 3,
+    id: "3",
     name: "Student #3",
     status: "Late" as const,
   },
   {
-    id: 4,
+    id: "4",
     name: "Student #4",
     status: "Absent" as const,
   },
 ];
 
-const Activity = () => {
+const ActivityPage = () => {
   const [selectedActivityId, setSelectedActivityId] = useState<number | null>(
     null,
   );
@@ -93,4 +93,4 @@ const Activity = () => {
   );
 };
 
-export default Activity;
+export default ActivityPage;

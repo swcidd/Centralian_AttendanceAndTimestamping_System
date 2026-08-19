@@ -1,8 +1,9 @@
-import { Student } from "../../types/types";
+import { StudentStatus } from "../../types/types";
 import TrackingRow from "./TrackingRow";
 
+
 interface TrackingTableProps {
-  students: Student[];
+  students: StudentStatus[];
 }
 
 const TrackingTable = ({ students }: TrackingTableProps) => {

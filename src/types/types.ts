@@ -1,8 +1,15 @@
 export interface Student {
-  id: number;
+  id: string;
   name: string;
-  status: "Present" | "Late" | "Absent";
 };
+
+export interface StudentStatus extends Student {
+  status: "Present" | "Late" | "Absent";
+}
+
+export interface StudentAttendance extends Student {
+  attendance: string;
+}
 
 export interface Activity {
   id: number;

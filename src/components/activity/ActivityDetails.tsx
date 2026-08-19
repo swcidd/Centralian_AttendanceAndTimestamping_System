@@ -1,9 +1,11 @@
-import { Student } from "../../types/types";
+import { StudentStatus } from "../../types/types";
+
+
 
 interface ActivityDetailsProps {
   date: string;
-  students: Student[];
-};
+  students: StudentStatus[];
+}
 
 const ActivityDetails = ({ date, students }: ActivityDetailsProps) => {
   return (

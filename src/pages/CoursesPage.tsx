@@ -49,15 +49,15 @@ const courses: Course[] = [
 
 const CoursesPage = () => {
   return (
-    <div className="bg-primary flex min-h-screen flex-row space-y-6 divide-x-2 divide-gray-500">
-      <div>
+    <div className="bg-primary flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
+      <div className="flex-2">
         <CourseToolbar />
-        <section className="flex-7 p-2">
+        <section className="p-2">
           <CourseGrid courses={courses} />
         </section>
       </div>
 
-      <section className="flex-5 p-2">
+      <section className="flex-1 p-2">
         <StudentTrackTable />
       </section>
     </div>

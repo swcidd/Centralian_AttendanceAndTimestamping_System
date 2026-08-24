@@ -10,15 +10,15 @@ const StudentTrackDetails = ({ name, onClose }: StudentTrackDetailsProps) => {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-xl border border-gray-200 bg-white shadow-sm"
+        className="w-full max-w-xl shadow-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b-3 border-gray-200 p-4 text-center">
+        <div className="bg-secondary overflow-hidden rounded-t-2xl p-4 text-center">
           <h2 className="text-2xl font-semibold">{name}</h2>
         </div>
 
-        <div className="p-8">
-          <div className="rounded-xl border-3 border-gray-200 p-5">
+        <div className="bg-primary rounded-b-2xl p-8">
+          <div className="rounded-xl border bg-white p-5">
             <h3 className="mb-5 text-center text-xl">Course Name</h3>
 
             <div className="space-y-4">
@@ -43,7 +43,7 @@ const StudentTrackDetails = ({ name, onClose }: StudentTrackDetailsProps) => {
           </div>
 
           <select
-            className="mt-6 w-full rounded-xl border-3 border-gray-200 bg-white p-3 text-center"
+            className="mt-6 w-full appearance-none rounded-xl border bg-white p-3 text-center"
             defaultValue="course"
           >
             <option value="course">Course Name</option>

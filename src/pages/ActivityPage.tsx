@@ -4,7 +4,7 @@ import ActivityFilters from "../components/activity/ActivityFilters";
 import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
-import { Activity } from "../types/types"
+import { Activity } from "../types/types";
 
 const activities: Activity[] = [
   {
@@ -70,7 +70,7 @@ const ActivityPage = () => {
   );
 
   return (
-    <div className="flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
+    <div className="bg-primary flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
       <div className="flex-1 p-4">
         <ActivityFilters />
       </div>

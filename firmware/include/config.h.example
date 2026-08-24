@@ -1,0 +1,12 @@
+#pragma once
+
+// Copy this file to config.h (gitignored) and fill in real values.
+// config.h is generated locally per device/developer and never committed.
+
+#define WIFI_SSID "your-ssid"
+#define WIFI_PASSWORD "your-wifi-password"
+
+// Pre-shared key used for HMAC_SHA256(PSK, MAC + Timestamp + NFC_UID)
+#define DEVICE_PSK "replace-with-shared-secret"
+
+#define API_ENDPOINT_URL "https://your-project.functions.supabase.co/ingest-tap"

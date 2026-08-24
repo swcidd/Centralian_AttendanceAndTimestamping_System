@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# PlatformIO build & local configuration files
+.pio/
+.vscode/.provider
+firmware/include/config.h
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# VS Code Local History extension
+.history/

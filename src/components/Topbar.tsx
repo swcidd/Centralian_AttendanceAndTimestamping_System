@@ -6,15 +6,15 @@ interface TopbarProps {
 
 const Topbar = ({ toggleSidebar }: TopbarProps) => {
   return (
-    <>
-      <div className="flex border-b-2 border-gray-500 items-center gap-2 p-2">
-        <CiMenuBurger
-          className="border-2 border-gray-500 stroke-2 p-1 text-2xl text-black"
-          onClick={toggleSidebar}
-        />
-        <h1 className="text-2xl font-bold tracking-tight">Centralian Attendance & Timestamping System</h1>
-      </div>
-    </>
+    <div className="bg-secondary flex items-center gap-2 border-b-2 border-gray-500 p-2">
+      <CiMenuBurger
+        className="stroke-2 p-1 text-2xl text-white"
+        onClick={toggleSidebar}
+      />
+      <h1 className="text-2xl font-bold tracking-tight text-white">
+        Centralian Attendance & Timestamping System
+      </h1>
+    </div>
   );
 };
 

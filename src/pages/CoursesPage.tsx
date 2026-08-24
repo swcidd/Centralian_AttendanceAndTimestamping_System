@@ -49,7 +49,7 @@ const courses: Course[] = [
 
 const CoursesPage = () => {
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen space-y-6">
       <CourseToolbar />
 
       <div className="flex divide-x-2 divide-gray-500">

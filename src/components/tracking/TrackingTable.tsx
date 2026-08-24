@@ -10,11 +10,11 @@ const TrackingTable = ({ students }: TrackingTableProps) => {
   return (
     <div className="overflow-hidden rounded-lg border">
       <table className="w-full">
-        <thead className="bg-gray-100">
+        <thead className="bg-secondary">
           <tr>
-            <th className="px-4 py-3 text-left">Student Name</th>
+            <th className="px-4 py-3 text-left text-white">Student Name</th>
 
-            <th className="px-4 py-3 text-left">Status</th>
+            <th className="px-4 py-3 text-left text-white">Status</th>
           </tr>
         </thead>
 

@@ -9,8 +9,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<DashboardLayout />}>
-          <Route index element={<ActivityPage />} />
-          <Route path="tracking" element={<TrackingPage />} />
+          <Route index element={<TrackingPage />} />
+          <Route path="tracking" element={<ActivityPage />} />
           <Route path="courses" element={<CoursesPage />} />
         </Route>
       </Routes>

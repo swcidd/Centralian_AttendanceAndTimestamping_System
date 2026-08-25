@@ -8,10 +8,12 @@
 -- ------------------------------------------------------------
 -- 1. Instructor profiles, keyed 1:1 to Supabase Auth users.
 --    Passwords live in auth.users; this table holds teacher data.
+--    Profile_ID IS the auth.users id (no separate surrogate key),
+--    so ownership policies below can compare directly against
+--    auth.uid() instead of joining through a second UUID column.
 -- ------------------------------------------------------------
 CREATE TABLE Profiles (
-    Profile_ID   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    Auth_User_ID UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    Profile_ID   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     First_Name   VARCHAR(100) NOT NULL,
     Last_Name    VARCHAR(100) NOT NULL,
     School_ID    VARCHAR(50) UNIQUE NOT NULL,
@@ -158,7 +160,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    INSERT INTO public.Profiles (Auth_User_ID, First_Name, Last_Name, School_ID)
+    INSERT INTO public.Profiles (Profile_ID, First_Name, Last_Name, School_ID)
     VALUES (
         NEW.id,
         NEW.raw_user_meta_data->>'first_name',
@@ -196,11 +198,11 @@ ALTER TABLE Pending_Registrations  ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_select_authenticated" ON Profiles
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "profiles_insert_own" ON Profiles
-    FOR INSERT TO authenticated WITH CHECK (Auth_User_ID = auth.uid());
+    FOR INSERT TO authenticated WITH CHECK (Profile_ID = auth.uid());
 CREATE POLICY "profiles_update_own" ON Profiles
-    FOR UPDATE TO authenticated USING (Auth_User_ID = auth.uid());
+    FOR UPDATE TO authenticated USING (Profile_ID = auth.uid());
 CREATE POLICY "profiles_delete_own" ON Profiles
-    FOR DELETE TO authenticated USING (Auth_User_ID = auth.uid());
+    FOR DELETE TO authenticated USING (Profile_ID = auth.uid());
 
 -- ---- Devices: shared registry; authenticated teachers manage terminals ----
 CREATE POLICY "devices_select_authenticated" ON Devices

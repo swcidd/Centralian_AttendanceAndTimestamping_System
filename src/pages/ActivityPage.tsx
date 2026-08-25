@@ -70,7 +70,7 @@ const ActivityPage = () => {
   );
 
   return (
-    <div className="bg-primary flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
+    <div className="bg-tan flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
       <div className="flex-1 p-4">
         <ActivityFilters />
       </div>

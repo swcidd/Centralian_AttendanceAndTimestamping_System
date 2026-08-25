@@ -13,11 +13,11 @@ const StudentTrackDetails = ({ name, onClose }: StudentTrackDetailsProps) => {
         className="w-full max-w-xl shadow-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-secondary overflow-hidden rounded-t-2xl p-4 text-center">
+        <div className="bg-orange overflow-hidden rounded-t-2xl p-4 text-center">
           <h2 className="text-2xl font-semibold">{name}</h2>
         </div>
 
-        <div className="bg-primary rounded-b-2xl p-8">
+        <div className="bg-tan rounded-b-2xl p-8">
           <div className="rounded-xl border bg-white p-5">
             <h3 className="mb-5 text-center text-xl">Course Name</h3>
 

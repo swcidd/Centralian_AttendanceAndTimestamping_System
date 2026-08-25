@@ -1,7 +1,6 @@
-
 const TrackingButton = () => {
   return (
-    <button className="rounded bg-green-600 px-5 py-2 text-white hover:bg-green-700">
+    <button className="bg-orange rounded-lg px-5 py-2.5 font-medium text-white shadow-sm transition hover:brightness-95 active:scale-90">
       Start Scanning
     </button>
   );

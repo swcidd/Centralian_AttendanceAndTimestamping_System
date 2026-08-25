@@ -3,9 +3,16 @@
 #include <Adafruit_PN532.h>
 #include <Wire.h>
 
-static Adafruit_PN532 nfc(PN532_SDA_PIN, PN532_SCL_PIN);
+// (irq, reset) — not (sda, scl); this library has no SDA/SCL-taking
+// constructor. -1/-1 because this board's IRQ/RSTO pins aren't wired;
+// I2C pins are set explicitly via Wire.begin() below instead. Passing
+// PN532_SDA_PIN/PN532_SCL_PIN here previously made the library treat
+// GPIO9 (SCL) as a reset output and toggle it on every begin(),
+// corrupting the I2C bus before any real transaction could happen.
+static Adafruit_PN532 nfc(-1, -1);
 
 bool nfcBegin() {
+  Wire.begin(PN532_SDA_PIN, PN532_SCL_PIN);
   nfc.begin();
   if (nfc.getFirmwareVersion() == 0) {
     return false;

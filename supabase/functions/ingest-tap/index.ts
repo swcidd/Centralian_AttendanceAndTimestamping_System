@@ -2,6 +2,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const PSK = Deno.env.get("DEVICE_PSK")!;
 const MAX_CLOCK_SKEW_SECONDS = 30;
+const UNIQUE_VIOLATION = "23505";
 
 interface TapPayload {
   device_mac: string;
@@ -54,20 +55,68 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // TODO: resolve student_id from payload.nfc_uid and session_id/stub_code
-  // from the ACTIVE_ATTENDANCE session open for payload.device_mac before
-  // inserting — both are NOT NULL on attendance_logs per the schema.
-  const { error } = await supabase.from("attendance_logs").insert({
+  const { data: session, error: sessionError } = await supabase
+    .from("active_sessions")
+    .select("session_id, stub_code, started_at")
+    .eq("device_mac", payload.device_mac)
+    .eq("status", "ACTIVE_ATTENDANCE")
+    .maybeSingle();
+
+  if (sessionError) {
+    return new Response(JSON.stringify({ error: sessionError.message }), {
+      status: 500,
+    });
+  }
+  if (!session) {
+    return new Response(
+      JSON.stringify({ error: "no active attendance session for this device" }),
+      { status: 409 }
+    );
+  }
+
+  const [{ data: course }, { data: student }] = await Promise.all([
+    supabase
+      .from("courses")
+      .select("late_after_minutes")
+      .eq("stub_code", session.stub_code)
+      .maybeSingle(),
+    supabase
+      .from("students")
+      .select("student_id")
+      .eq("nfc_uid", payload.nfc_uid)
+      .maybeSingle(),
+  ]);
+
+  const tapTime = new Date(payload.timestamp * 1000);
+  const lateAfterMinutes = course?.late_after_minutes ?? null;
+  const isLate =
+    student != null &&
+    lateAfterMinutes != null &&
+    tapTime.getTime() >=
+      new Date(session.started_at).getTime() + lateAfterMinutes * 60_000;
+
+  const status = student == null ? "UNKNOWN" : isLate ? "LATE" : "PRESENT";
+
+  const { error: insertError } = await supabase.from("attendance_logs").insert({
+    session_id: session.session_id,
+    student_id: student?.student_id ?? null,
+    stub_code: session.stub_code,
     nfc_uid: payload.nfc_uid,
     device_mac: payload.device_mac,
-    timestamp: new Date(payload.timestamp * 1000).toISOString(),
+    status,
+    timestamp: tapTime.toISOString(),
   });
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  // A duplicate tap for a student already logged this session isn't an
+  // error — the unique index (session_id, student_id) already recorded
+  // their first tap, so this one is a harmless no-op.
+  if (insertError && insertError.code !== UNIQUE_VIOLATION) {
+    return new Response(JSON.stringify({ error: insertError.message }), {
       status: 500,
     });
   }
 
-  return new Response(JSON.stringify({ status: "ok" }), { status: 201 });
+  return new Response(JSON.stringify({ status: "ok", attendance_status: status }), {
+    status: 201,
+  });
 });

@@ -5,43 +5,7 @@ import StudentTrackDetails from "./StudentTrackDetails";
 
 import { StudentAttendance } from "../../types/types";
 
-const students: StudentAttendance[] = [
-  {
-    id: "2026-001",
-    name: "Student #1",
-    present: 9,
-    late: 1,
-    absent: 2,
-  },
-  {
-    id: "2026-002",
-    name: "Student #2",
-    present: 8,
-    late: 2,
-    absent: 2,
-  },
-  {
-    id: "2026-003",
-    name: "Student #3",
-    present: 10,
-    late: 0,
-    absent: 2,
-  },
-  {
-    id: "2026-004",
-    name: "Student #4",
-    present: 8,
-    late: 1,
-    absent: 3,
-  },
-  {
-    id: "2026-005",
-    name: "Student #5",
-    present: 9,
-    late: 2,
-    absent: 1,
-  },
-];
+const students: StudentAttendance[] = [];
 
 const StudentTrackTable = () => {
   const [selectedStudent, setSelectedStudent] =

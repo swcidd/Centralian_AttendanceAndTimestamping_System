@@ -35,3 +35,6 @@ firmware/include/config.h
 
 # VS Code Local History extension
 .history/
+
+# Wrangler CLI local state
+.wrangler/

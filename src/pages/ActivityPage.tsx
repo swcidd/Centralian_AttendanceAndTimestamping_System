@@ -4,61 +4,11 @@ import ActivityFilters from "../components/activity/ActivityFilters";
 import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
-import { Activity } from "../types/types";
+import { Activity, StudentStatus } from "../types/types";
 
-const activities: Activity[] = [
-  {
-    id: 1,
-    date: "August 5, 2026",
-    present: 25,
-    absent: 3,
-    late: 2,
-  },
-  {
-    id: 2,
-    date: "August 7, 2026",
-    present: 27,
-    absent: 2,
-    late: 1,
-  },
-  {
-    id: 3,
-    date: "August 9, 2026",
-    present: 24,
-    absent: 4,
-    late: 2,
-  },
-  {
-    id: 4,
-    date: "August 10, 2026",
-    present: 26,
-    absent: 2,
-    late: 2,
-  },
-];
+const activities: Activity[] = [];
 
-const students = [
-  {
-    id: "1",
-    name: "Student #1",
-    status: "Present" as const,
-  },
-  {
-    id: "2",
-    name: "Student #2",
-    status: "Present" as const,
-  },
-  {
-    id: "3",
-    name: "Student #3",
-    status: "Late" as const,
-  },
-  {
-    id: "4",
-    name: "Student #4",
-    status: "Absent" as const,
-  },
-];
+const students: StudentStatus[] = [];
 
 const ActivityPage = () => {
   const [selectedActivityId, setSelectedActivityId] = useState<number | null>(

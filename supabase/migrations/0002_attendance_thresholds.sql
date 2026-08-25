@@ -87,8 +87,12 @@ END;
 $$;
 
 -- ------------------------------------------------------------
--- 5. Run every minute. cron.schedule() updates the existing job
---    in place when one with this name already exists, so
---    re-running this migration is safe.
+-- 5. Run every minute. Extension is enabled here (not just via
+--    the dashboard) so this migration also succeeds on a fresh
+--    database, e.g. a Supabase preview branch. cron.schedule()
+--    updates the existing job in place when one with this name
+--    already exists, so re-running this migration is safe.
 -- ------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+
 SELECT cron.schedule('finalize-absences', '* * * * *', 'SELECT public.finalize_absences();');

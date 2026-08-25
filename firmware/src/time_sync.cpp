@@ -1,4 +1,5 @@
 #include "time_sync.h"
+#include <Arduino.h>   // configTime declared here in arduino-esp32 v3.x
 #include <time.h>
 
 static const char *NTP_SERVER = "pool.ntp.org";

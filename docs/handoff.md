@@ -12,9 +12,9 @@
 
 | Layer | Selected Tech | Details & Purpose |
 | --- | --- | --- |
-| Microcontroller | ESP32 | Wi-Fi-enabled controller for processing hardware interrupts and streaming JSON payloads over HTTPS. |
+| Microcontroller | ESP32-S3 N16R8 (DOIT devkit) | Wi-Fi-enabled controller for processing hardware interrupts and streaming JSON payloads over HTTPS. 16MB flash / 8MB octal PSRAM; I2C defaults to GPIO8/9 on this board, not the classic ESP32's GPIO21/22. |
 | NFC Peripheral | PN532 (I2C Mode) | Reads ISO14443A card UIDs (DIP switches: SW1=ON, SW2=OFF). |
-| Status LED | GPIO2 (`STATUS_LED_PIN`) | Blink-coded tap-result feedback (see §8) — most ESP32 dev boards have this wired to an onboard LED already; wire an external LED + ~220–330Ω resistor if not. |
+| Status LED | Onboard WS2812 RGB, GPIO48 (`STATUS_LED_PIN`) | Color+blink-coded tap-result feedback via `Adafruit_NeoPixel` (see §8): green=accepted, orange=no active session, red=rejected/invalid. No external wiring needed — it's the board's built-in addressable LED. |
 | Embedded Environment | C++ via PlatformIO (VS Code) | Managed dependencies via `platformio.ini`, board pinouts, and NTP time sync. |
 | Database & Realtime | Supabase (PostgreSQL) | Stores master student registers, handles RLS security, and broadcasts real-time attendance events. |
 | Frontend Web App | React + TypeScript (Vite) | Declarative instructor dashboard for real-time room capacity and student tracking. |

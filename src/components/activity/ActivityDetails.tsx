@@ -1,7 +1,5 @@
 import { StudentStatus } from "../../types/types";
 
-
-
 interface ActivityDetailsProps {
   date: string;
   students: StudentStatus[];
@@ -9,24 +7,33 @@ interface ActivityDetailsProps {
 
 const ActivityDetails = ({ date, students }: ActivityDetailsProps) => {
   return (
-    <div className="rounded-xl border bg-white p-6 shadow-sm">
-      <h2 className="mb-6 text-xl font-semibold">{date}</h2>
+    <div className="overflow-hiden border-tan rounded-xl border bg-white shadow-sm">
+      <h2 className="text-navy p-5 text-xl font-bold">{date}</h2>
 
       <table className="w-full">
-        <thead>
-          <tr className="border-b text-left">
-            <th className="px-3 py-3">Student</th>
+        <thead className="bg-navy">
+          <tr className="text-left">
+            <th className="px-4 py-3 text-sm font-semibold text-white">
+              Student
+            </th>
 
-            <th className="px-3 py-3">Status</th>
+            <th className="px-4 py-3 text-sm font-semibold text-white">
+              Status
+            </th>
           </tr>
         </thead>
 
         <tbody>
           {students.map((student) => (
-            <tr key={student.id} className="border-b">
-              <td className="px-3 py-3">{student.name}</td>
+            <tr
+              key={student.id}
+              className="border-tan hover:bg-cream border-b transition-colors last:border-b-0"
+            >
+              <td className="text-navy px-4 py-3 font-medium">
+                {student.name}
+              </td>
 
-              <td className="px-3 py-3">{student.status}</td>
+              <td className="text-navy/70 px-4 py-3">{student.status}</td>
             </tr>
           ))}
         </tbody>

@@ -70,24 +70,26 @@ const ActivityPage = () => {
   );
 
   return (
-    <div className="bg-tan flex min-h-screen space-y-6 divide-x-2 divide-gray-500">
-      <div className="flex-1 p-4">
-        <ActivityFilters />
-      </div>
-
-      <div className="flex-3 p-4">
-        <ActivityGrid
-          activities={activities}
-          onActivitySelect={setSelectedActivityId}
-        />
-      </div>
-
-      <div className="flex-2 p-4">
-        {selectedActivity ? (
-          <ActivityDetails date={selectedActivity.date} students={students} />
-        ) : (
-          <p className="flex justify-center text-gray-500">Select a Date</p>
-        )}
+    <div className="bg-cream min-h-screen p-6">
+      <div className="grid gap-6 lg:grid-cols-[180px_1fr_320px]">
+        <section>
+          <ActivityFilters />
+        </section>
+        <section>
+          <ActivityGrid
+            activities={activities}
+            onActivitySelect={setSelectedActivityId}
+          />
+        </section>
+        <section className="border-tan lg:border-l lg:pl-6">
+          {selectedActivity ? (
+            <ActivityDetails date={selectedActivity.date} students={students} />
+          ) : (
+            <div className="border-tan flex min-h-40 items-center justify-center rounded-xl border bg-white p-6 text-center shadow-sm">
+              <p className="text-navy/60 font-medium">Select a Date</p>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

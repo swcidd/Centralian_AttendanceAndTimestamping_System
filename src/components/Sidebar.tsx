@@ -36,11 +36,11 @@ const Sidebar = ({ isOpen, toggleSidebar }: SidebarProps) => {
           />
         </div>
         <nav className="flex flex-col">
-          <NavLink to="/activity" className={linkStyle}>
-            Activity
-          </NavLink>
           <NavLink to="/tracking" className={linkStyle}>
             Tracking
+          </NavLink>
+          <NavLink to="/activity" className={linkStyle}>
+            Activity
           </NavLink>
           <NavLink to="/courses" className={linkStyle}>
             Courses

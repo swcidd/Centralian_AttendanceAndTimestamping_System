@@ -14,7 +14,7 @@ export interface StudentAttendance extends Student {
 }
 
 export interface Activity {
-  id: number;
+  id: string;
   date: string;
   present: number;
   absent: number;

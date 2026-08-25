@@ -1,29 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import ActivityFilters from "../components/activity/ActivityFilters";
 import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
-import { Activity, StudentStatus } from "../types/types";
-
-const activities: Activity[] = [];
-
-const students: StudentStatus[] = [];
+import { fetchActivityLog, fetchSessionRoster } from "../services/attendanceApi";
+import type { Activity, StudentStatus } from "../types/types";
 
 const ActivityPage = () => {
-  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(
+  const [selectedStub, setSelectedStub] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(
     null,
   );
+  const [students, setStudents] = useState<StudentStatus[]>([]);
+
+  useEffect(() => {
+    setSelectedActivityId(null);
+    if (!selectedStub) {
+      setActivities([]);
+      return;
+    }
+    fetchActivityLog(selectedStub)
+      .then(setActivities)
+      .catch(() => setActivities([]));
+  }, [selectedStub]);
 
   const selectedActivity = activities.find(
     (activity) => activity.id === selectedActivityId,
   );
 
+  useEffect(() => {
+    if (!selectedStub || !selectedActivityId) {
+      setStudents([]);
+      return;
+    }
+    fetchSessionRoster(selectedStub, selectedActivityId)
+      .then(setStudents)
+      .catch(() => setStudents([]));
+  }, [selectedStub, selectedActivityId]);
+
   return (
     <div className="bg-cream min-h-screen p-6">
       <div className="grid gap-6 lg:grid-cols-[180px_1fr_320px]">
         <section>
-          <ActivityFilters />
+          <ActivityFilters
+            selectedStub={selectedStub}
+            onStubChange={setSelectedStub}
+          />
         </section>
         <section>
           <ActivityGrid

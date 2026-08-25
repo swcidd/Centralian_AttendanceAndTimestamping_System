@@ -3,7 +3,7 @@ import ActivityCard from "./ActivityCard";
 
 interface ActivityGridProps {
   activities: Activity[];
-  onActivitySelect: (id: number) => void;
+  onActivitySelect: (id: string) => void;
 }
 
 const ActivityGrid = ({ activities, onActivitySelect }: ActivityGridProps) => {

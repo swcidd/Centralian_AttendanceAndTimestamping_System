@@ -1,10 +1,10 @@
 interface ActivityCardProps {
-  id: number;
+  id: string;
   date: string;
   present: number;
   absent: number;
   late: number;
-  onClick: (id: number) => void;
+  onClick: (id: string) => void;
 }
 
 const ActivityCard = ({

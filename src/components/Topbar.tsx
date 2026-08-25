@@ -6,7 +6,7 @@ interface TopbarProps {
 
 const Topbar = ({ toggleSidebar }: TopbarProps) => {
   return (
-    <div className="bg-orange border-tan flex items-center gap-3 border-b px-4 py-3">
+    <div className="bg-orange border-tan flex items-center gap-3 px-4 py-3">
       <CiMenuBurger
         className="cursor-pointer stroke-2 p-1 text-3xl text-white"
         onClick={toggleSidebar}

@@ -1,4 +1,8 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+
 import DashboardLayout from "./layouts/DashboardLayout";
 import ActivityPage from "./pages/ActivityPage";
 import TrackingPage from "./pages/TrackingPage";
@@ -8,10 +12,15 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
         <Route element={<DashboardLayout />}>
-          <Route index element={<TrackingPage />} />
-          <Route path="tracking" element={<ActivityPage />} />
-          <Route path="courses" element={<CoursesPage />} />
+          <Route path="/tracking" element={<TrackingPage />} />
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/courses" element={<CoursesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

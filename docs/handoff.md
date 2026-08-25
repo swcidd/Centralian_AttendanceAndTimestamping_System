@@ -85,7 +85,7 @@ Each course can set two independent, optional thresholds (`Courses.Late_After_Mi
 
 - [x] **Phase 1: Cloud Architecture & Deployment** — Supabase schema, React + TS frontend UI shell, Cloudflare Pages deployment.
 - [ ] **Phase 2: Firmware Implementation** — PN532 I2C wiring, NTP sync, HMAC-SHA256 signing, UID validation, and the tap→POST pipeline are implemented (see §8); still open: physical wiring/flashing on real hardware and an end-to-end tap → ESP32 → Supabase → dashboard verification.
-- [ ] **Phase 3: Frontend Integration** — Wire `src/lib/supabase.ts`, realtime subscription, instructor 2FA/session-gate UI, FP-layer implementations (currently stubs).
+- [ ] **Phase 3: Frontend Integration** — `TrackingPage` now shows a live roster: enrolled students fetched from Supabase, merged with the open session's `Attendance_Logs`, updated in real time via `useRealtimeAttendance` folded through the `attendanceReducer` pure reducer (`src/lib/utils/attendanceReducer.ts`, per `project-plan.md` §3). Still open: the instructor 2FA/session-gate UI itself — sessions currently start via a manual dashboard button (`TrackingButton`), not the NFC-tap-triggers-password-challenge flow described in §1; and `ActivityPage`/`StudentTrackTable` still render hardcoded empty arrays (historical/summary views, not yet wired).
 
 ## 8. Firmware FP Concept Mapping
 

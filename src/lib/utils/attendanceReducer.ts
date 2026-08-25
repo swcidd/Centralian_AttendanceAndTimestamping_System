@@ -7,6 +7,7 @@ export interface RosterState {
 export interface TapEvent {
   studentId: string;
   timestamp: string;
+  status: StudentStatus["status"];
 }
 
 // Pure: given the current roster and a tap event, returns a new roster
@@ -18,7 +19,7 @@ export function attendanceReducer(
   return {
     students: state.students.map((student) =>
       student.id === event.studentId
-        ? { ...student, status: "Present" }
+        ? { ...student, status: event.status }
         : student
     ),
   };

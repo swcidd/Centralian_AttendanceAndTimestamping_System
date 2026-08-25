@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   closeSession,
@@ -10,20 +10,17 @@ import type { Course } from "../../types/types";
 
 interface TrackingButtonProps {
   course: Course | null;
+  sessionId: string | null;
+  onSessionChange: (sessionId: string | null) => void;
 }
 
-const TrackingButton = ({ course }: TrackingButtonProps) => {
-  const [sessionId, setSessionId] = useState<string | null>(null);
+const TrackingButton = ({
+  course,
+  sessionId,
+  onSessionChange,
+}: TrackingButtonProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-
-  useEffect(() => {
-    if (!course) return;
-
-    getActiveSession(course.stub)
-      .then((session) => setSessionId(session?.sessionId ?? null))
-      .catch(() => setSessionId(null));
-  }, [course]);
 
   const handleClick = async () => {
     if (!course) return;
@@ -33,7 +30,7 @@ const TrackingButton = ({ course }: TrackingButtonProps) => {
     try {
       if (sessionId) {
         await closeSession(sessionId);
-        setSessionId(null);
+        onSessionChange(null);
       } else {
         if (!course.deviceMac) {
           setError("This course has no terminal assigned yet.");
@@ -41,7 +38,7 @@ const TrackingButton = ({ course }: TrackingButtonProps) => {
         }
         await startSession(course.stub, course.deviceMac);
         const session = await getActiveSession(course.stub);
-        setSessionId(session?.sessionId ?? null);
+        onSessionChange(session?.sessionId ?? null);
       }
     } catch (err) {
       setError(getErrorMessage(err, "Something went wrong."));

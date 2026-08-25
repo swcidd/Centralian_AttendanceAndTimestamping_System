@@ -19,7 +19,7 @@ const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const deviceMac = (formData.get("deviceMac") as string).trim();
+    const deviceMac = (formData.get("deviceMac") as string).trim().toUpperCase();
     const roomName = (formData.get("roomName") as string).trim();
 
     if (deviceMac && !roomName) {

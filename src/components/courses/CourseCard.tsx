@@ -3,40 +3,30 @@ interface CourseCardProps {
   name: string;
   schedule: string;
   instructor: string;
-};
+}
 
-const CourseCard = ({
-  stub,
-  name,
-  schedule,
-  instructor,
-}: CourseCardProps) => {
+const CourseCard = ({ stub, name, schedule, instructor }: CourseCardProps) => {
   return (
-    <div
-    className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-      <p className="text-sm font-medium text-gray-500">
-        Stub: {stub}
-      </p>
-
-      <h3 className="mt-1 text-lg font-semibold text-gray-800">
-        {name}
-      </h3>
-
-      <div className="mt-4 space-y-2 text-sm text-gray-600">
-
-        <p>
-          <span className="font-medium">Schedule:</span>{" "}
-          {schedule}
-        </p>
-
-        <p>
-          <span className="font-medium">Instructor:</span>{" "}
-          {instructor}
-        </p>
-
+    <div className="border-tan transiton rounded-xl border bg-white p-5 shadow-sm hover:-translate-y-1 hover:shadow-md">
+      <div className="flex items-center">
+        <p className="text-orange text-sm font-medium">Stub: {stub}</p>
       </div>
 
+      <h3 className="text-navy mt-2 text-lg font-semibold">{name}</h3>
+
+      <div className="mt-4 space-y-3 text-sm">
+        <div>
+          <p className="text-navy font-medium">Schedule</p>
+
+          <p className="text-navy/60 mt-1">{schedule}</p>
+        </div>
+
+        <div>
+          <p className="text-navy font-medium">Instructor</p>
+
+          <p className="text-navy/60 mt-1">{instructor}</p>
+        </div>
+      </div>
     </div>
   );
 };

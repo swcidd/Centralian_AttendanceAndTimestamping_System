@@ -19,7 +19,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: SidebarProps) => {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40"
+          className="fixed inset-0 z-40 bg-navy/40"
           onClick={toggleSidebar}
         ></div>
       )}

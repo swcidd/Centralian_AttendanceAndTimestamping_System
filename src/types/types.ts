@@ -8,7 +8,9 @@ export interface StudentStatus extends Student {
 }
 
 export interface StudentAttendance extends Student {
-  attendance: string;
+  present: number;
+  late: number;
+  absent: number;
 }
 
 export interface Activity {

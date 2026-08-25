@@ -13,7 +13,7 @@ const DashboardLayout = () => {
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
       <div className="flex flex-1 flex-col">
         <Topbar toggleSidebar={toggleSidebar} />
-        <main className="flex-1 bg-cream p-6">
+        <main className="flex-1 bg-cream">
           <Outlet />
         </main>
       </div>

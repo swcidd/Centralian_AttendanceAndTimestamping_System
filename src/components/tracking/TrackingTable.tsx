@@ -7,13 +7,17 @@ interface TrackingTableProps {
 
 const TrackingTable = ({ students }: TrackingTableProps) => {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="border-tan overflow-hidden rounded-lg bg-white shadow-sm">
       <table className="w-full">
-        <thead className="bg-orange">
+        <thead className="bg-navy">
           <tr>
-            <th className="px-4 py-3 text-left text-white">Student Name</th>
+            <th className="font-semibold px-5 py-4 text-left text-sm text-white">
+              Student Name
+            </th>
 
-            <th className="px-4 py-3 text-left text-white">Status</th>
+            <th className="font-semibold px-5 py-4 text-left text-sm text-white">
+              Status
+            </th>
           </tr>
         </thead>
 

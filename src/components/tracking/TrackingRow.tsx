@@ -7,10 +7,10 @@ interface TrackingRowProps {
 
 const TrackingRow = ({ studentName, status }: TrackingRowProps) => {
   return (
-    <tr className="border-b">
-      <td className="px-4 py-3">{studentName}</td>
+    <tr className="border-tan hover:bg-cream border-b transition-colors">
+      <td className="text-navy px-5 py-4 font-medium">{studentName}</td>
 
-      <td className="px-4 py-3">
+      <td className="px-5 py-4">
         <TrackingStatus status={status} />
       </td>
     </tr>

@@ -15,7 +15,7 @@ const students = [
 
 const TrackingPage = () => {
   return (
-    <div className="bg-tan min-h-screen space-y-6 p-6">
+    <div className="bg-cream min-h-screen space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
         <TrackingFilters />
         <TrackingButton />

@@ -1,0 +1,10 @@
+# Device-facing functions authenticate via PSK-HMAC in the request
+# body (see supabase/functions/_shared/deviceAuth.ts) — the ESP32 has
+# no Supabase Auth session and never sends an Authorization header, so
+# the platform's default JWT gate has to be off for these two or every
+# real device request gets rejected before the function code even runs.
+[functions.ingest-tap]
+verify_jwt = false
+
+[functions.poll-commands]
+verify_jwt = false

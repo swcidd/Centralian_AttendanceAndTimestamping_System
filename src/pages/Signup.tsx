@@ -68,6 +68,7 @@ const Signup = () => {
                 type="text"
                 name="firstName"
                 required
+                placeholder="First name"
                 className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
               />
 
@@ -75,6 +76,7 @@ const Signup = () => {
                 type="text"
                 name="lastName"
                 required
+                placeholder="Last name"
                 className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
               />
             </div>
@@ -83,6 +85,7 @@ const Signup = () => {
               type="text"
               name="schoolId"
               required
+              placeholder="School ID"
               className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
             />
 
@@ -90,6 +93,7 @@ const Signup = () => {
               type="email"
               name="email"
               required
+              placeholder="School Email"
               className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
             />
 
@@ -97,6 +101,7 @@ const Signup = () => {
               type="password"
               name="password"
               required
+              placeholder="Password"
               className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
             />
 

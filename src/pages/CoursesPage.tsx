@@ -11,18 +11,20 @@ const CoursesPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadCourses = () => {
     fetchCourses()
       .then(setCourses)
       .catch((err: Error) => setError(err.message));
-  }, []);
+  };
+
+  useEffect(loadCourses, []);
 
   return (
     <div className="bg-cream min-h-screen p-6">
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="min-w-0">
           <div className="border-tan overflow-hidden rounded-xl border bg-white shadow-sm">
-            <CourseToolbar />
+            <CourseToolbar onCourseAdded={loadCourses} />
             <div className="p-5">
               {error ? (
                 <p className="text-sm text-red-600">{error}</p>

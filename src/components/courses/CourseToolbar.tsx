@@ -1,4 +1,13 @@
-const CourseToolbar = () => {
+import { useState } from "react";
+import AddCourseModal from "./AddCourseModal";
+
+interface CourseToolbarProps {
+  onCourseAdded: () => void;
+}
+
+const CourseToolbar = ({ onCourseAdded }: CourseToolbarProps) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   return (
     <div className="border-tan flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex-1">
@@ -10,7 +19,10 @@ const CourseToolbar = () => {
       </div>
 
       <div className="flex gap-3">
-        <button className="bg-orange rounded-lg px-5 py-2.5 text-sm font-medium text-white hover:brightness-95 active:scale-90">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-orange rounded-lg px-5 py-2.5 text-sm font-medium text-white hover:brightness-95 active:scale-90"
+        >
           Add Course
         </button>
 
@@ -18,6 +30,13 @@ const CourseToolbar = () => {
           Delete
         </button>
       </div>
+
+      {isModalOpen && (
+        <AddCourseModal
+          onClose={() => setIsModalOpen(false)}
+          onCreated={onCourseAdded}
+        />
+      )}
     </div>
   );
 };

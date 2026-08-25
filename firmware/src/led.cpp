@@ -24,3 +24,7 @@ void ledIndicateResult(int statusCode) {
     blink(3);
   }
 }
+
+void ledIndicateInvalidUid() {
+  blink(4);
+}

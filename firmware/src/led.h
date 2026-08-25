@@ -10,3 +10,7 @@ void ledBegin();
 //   2 blinks = no active attendance session for this device (409)
 //   3 blinks = anything else (rejected signature, network failure, ...)
 void ledIndicateResult(int statusCode);
+
+// 4 rapid blinks — a UID failed validateUidFormat() and was rejected
+// before it was ever signed or sent.
+void ledIndicateInvalidUid();

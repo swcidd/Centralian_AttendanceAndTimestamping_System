@@ -5,6 +5,7 @@ import {
   getActiveSession,
   startSession,
 } from "../../services/sessionsApi";
+import { getErrorMessage } from "../../lib/errors";
 import type { Course } from "../../types/types";
 
 interface TrackingButtonProps {
@@ -43,7 +44,7 @@ const TrackingButton = ({ course }: TrackingButtonProps) => {
         setSessionId(session?.sessionId ?? null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(getErrorMessage(err, "Something went wrong."));
     } finally {
       setIsBusy(false);
     }

@@ -5,6 +5,7 @@ import CourseGrid from "../components/courses/CourseGrid";
 import StudentTrackTable from "../components/courses/StudentTrackTable";
 
 import { fetchCourses } from "../services/coursesApi";
+import { getErrorMessage } from "../lib/errors";
 import type { Course } from "../types/types";
 
 const CoursesPage = () => {
@@ -14,7 +15,9 @@ const CoursesPage = () => {
   const loadCourses = () => {
     fetchCourses()
       .then(setCourses)
-      .catch((err: Error) => setError(err.message));
+      .catch((err: unknown) =>
+        setError(getErrorMessage(err, "Failed to load courses."))
+      );
   };
 
   useEffect(loadCourses, []);

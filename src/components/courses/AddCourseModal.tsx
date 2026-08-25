@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createCourse } from "../../services/coursesApi";
+import { getErrorMessage } from "../../lib/errors";
 
 interface AddCourseModalProps {
   onClose: () => void;
@@ -41,7 +42,7 @@ const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
       onCreated();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add course.");
+      setError(getErrorMessage(err, "Failed to add course."));
     } finally {
       setIsSubmitting(false);
     }

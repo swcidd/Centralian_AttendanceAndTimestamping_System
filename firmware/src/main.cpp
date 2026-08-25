@@ -6,6 +6,7 @@
 #include "net.h"
 #include "nfc.h"
 #include "time_sync.h"
+#include "validation.h"
 
 namespace {
 const unsigned long WIFI_TIMEOUT_MS = 20000;
@@ -39,11 +40,19 @@ void setup() {
 }
 
 void loop() {
-  String uid = nfcReadUid();
-  if (uid.length() == 0) {
+  String rawUid = nfcReadUid();
+  if (rawUid.length() == 0) {
     lastUid = "";
     return;
   }
+
+  UidValidation validation = validateUidFormat(rawUid);
+  if (!validation.ok) {
+    Serial.println("Rejected tap: " + validation.error);
+    ledIndicateInvalidUid();
+    return;
+  }
+  String uid = validation.uid;
 
   unsigned long now = millis();
   if (uid == lastUid && (now - lastTapMillis) < TAP_DEBOUNCE_MS) {

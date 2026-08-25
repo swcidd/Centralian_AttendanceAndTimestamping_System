@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | Microcontroller | ESP32 | Wi-Fi-enabled controller for processing hardware interrupts and streaming JSON payloads over HTTPS. |
 | NFC Peripheral | PN532 (I2C Mode) | Reads ISO14443A card UIDs (DIP switches: SW1=ON, SW2=OFF). |
+| Status LED | GPIO2 (`STATUS_LED_PIN`) | Blink-coded tap-result feedback (see §8) — most ESP32 dev boards have this wired to an onboard LED already; wire an external LED + ~220–330Ω resistor if not. |
 | Embedded Environment | C++ via PlatformIO (VS Code) | Managed dependencies via `platformio.ini`, board pinouts, and NTP time sync. |
 | Database & Realtime | Supabase (PostgreSQL) | Stores master student registers, handles RLS security, and broadcasts real-time attendance events. |
 | Frontend Web App | React + TypeScript (Vite) | Declarative instructor dashboard for real-time room capacity and student tracking. |
@@ -83,5 +84,15 @@ Each course can set two independent, optional thresholds (`Courses.Late_After_Mi
 ## 7. Development Roadmap
 
 - [x] **Phase 1: Cloud Architecture & Deployment** — Supabase schema, React + TS frontend UI shell, Cloudflare Pages deployment.
-- [ ] **Phase 2: Firmware Implementation** — Wire PN532 over I2C (SDA→GPIO21, SCL→GPIO22), NTP sync on boot, `mbedtls/md.h` HMAC-SHA256, end-to-end verify: tap → ESP32 HTTPS POST → Supabase → dashboard live update.
+- [ ] **Phase 2: Firmware Implementation** — PN532 I2C wiring, NTP sync, HMAC-SHA256 signing, UID validation, and the tap→POST pipeline are implemented (see §8); still open: physical wiring/flashing on real hardware and an end-to-end tap → ESP32 → Supabase → dashboard verification.
 - [ ] **Phase 3: Frontend Integration** — Wire `src/lib/supabase.ts`, realtime subscription, instructor 2FA/session-gate UI, FP-layer implementations (currently stubs).
+
+## 8. Firmware FP Concept Mapping
+
+Per the FP concepts in `project-plan.md`, the firmware's tap pipeline (`firmware/src/main.cpp:loop()`) composes small functions, most of them pure, into a single predictable sequence — the "Single-Step Event Pipe" from the original worksheet:
+
+`nfcReadUid()` (I/O) → `validateUidFormat()` (pure) → `signPayload()` (pure) → `postTapEvent()` (I/O) → `ledIndicateResult()` (I/O)
+
+- **Pure function + `Result`-style error handling** — [`firmware/src/validation.h`](../firmware/src/validation.h) / [`validation.cpp`](../firmware/src/validation.cpp). `validateUidFormat()` takes a raw UID string and always returns the same `UidValidation{ok, uid, error}` for the same input, with no side effects. A malformed or wrong-length UID is rejected (logged + a distinct LED pattern) before it's ever signed or sent, without touching the network. Named to distinguish it from the differently-scoped `validateUid()` in [`src/services/validation.ts`](../src/services/validation.ts), which is the frontend's FP layer (`src/lib/utils/result.ts` `Result<T, E>`) checking whether a UID belongs to a *registered* student, not whether it's well-formed.
+- **Pure function** — [`firmware/src/crypto.cpp`](../firmware/src/crypto.cpp). `signPayload()` is a deterministic HMAC computation with no I/O.
+- **Composition** — `loop()` itself: each stage only runs if the previous one succeeded, and the network/HMAC logic never sees an unvalidated UID. Matches the pipeline shape already documented for the frontend's `pipe()`/`compose()` helpers in [`src/lib/utils/composition.ts`](../src/lib/utils/composition.ts) ("tap → validate → dedupe → timestamp → log").

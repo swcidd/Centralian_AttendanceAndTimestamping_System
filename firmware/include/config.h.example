@@ -7,6 +7,10 @@
 #define WIFI_PASSWORD "your-wifi-password"
 
 // Pre-shared key used for HMAC_SHA256(PSK, MAC + Timestamp + NFC_UID)
+// (tap events, see ingest-tap) and HMAC_SHA256(PSK, MAC + Timestamp)
+// (command polling, see poll-commands) — same key, two signed message
+// shapes depending on which endpoint is being called.
 #define DEVICE_PSK "replace-with-shared-secret"
 
 #define API_ENDPOINT_URL "https://your-project.functions.supabase.co/ingest-tap"
+#define POLL_COMMANDS_ENDPOINT_URL "https://your-project.functions.supabase.co/poll-commands"

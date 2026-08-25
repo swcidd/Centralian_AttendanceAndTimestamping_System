@@ -15,3 +15,15 @@ int postTapEvent(const String &deviceMac, unsigned long timestamp,
   Serial.println();
   return 200;
 }
+
+// Dry-run stub: no backend to poll yet, always reports nothing pending
+// rather than hitting the network.
+DeviceCommand pollDeviceCommand(const String &deviceMac, unsigned long timestamp,
+                                const String &signature) {
+  Serial.println("[DRY RUN] poll-commands request (not sent):");
+  Serial.printf("  device_mac : %s\n", deviceMac.c_str());
+  Serial.printf("  timestamp  : %lu\n", timestamp);
+  Serial.printf("  signature  : %s\n", signature.c_str());
+  Serial.println();
+  return DeviceCommand{false, "", ""};
+}

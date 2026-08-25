@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include "commands.h"
 #include "config.h"
 #include "crypto.h"
 #include "led.h"
@@ -45,6 +46,8 @@ void setup() {
 }
 
 void loop() {
+  pollDeviceCommandsIfDue();
+
   String rawUid = nfcReadUid();
   if (rawUid.length() == 0) {
     lastUid = "";

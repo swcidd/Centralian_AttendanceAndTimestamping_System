@@ -35,3 +35,11 @@ void ledIndicateResult(int statusCode) {
 void ledIndicateInvalidUid() {
   blink(4, pixel.Color(255, 0, 0));
 }
+
+void ledIndicateSessionStart() {
+  blink(2, pixel.Color(0, 0, 255));
+}
+
+void ledIndicateSessionEnd() {
+  blink(1, pixel.Color(0, 0, 255));
+}

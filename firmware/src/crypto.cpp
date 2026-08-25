@@ -2,9 +2,9 @@
 #include "config.h"
 #include <mbedtls/md.h>
 
-String signPayload(const String &deviceMac, unsigned long timestamp, const String &nfcUid) {
-  String message = deviceMac + String(timestamp) + nfcUid;
+namespace {
 
+String hmacSha256Hex(const String &message) {
   const mbedtls_md_info_t *mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
   uint8_t hmacResult[32];
 
@@ -22,4 +22,14 @@ String signPayload(const String &deviceMac, unsigned long timestamp, const Strin
     signature += String(hmacResult[i], HEX);
   }
   return signature;
+}
+
+}  // namespace
+
+String signPayload(const String &deviceMac, unsigned long timestamp, const String &nfcUid) {
+  return hmacSha256Hex(deviceMac + String(timestamp) + nfcUid);
+}
+
+String signDeviceMessage(const String &deviceMac, unsigned long timestamp) {
+  return hmacSha256Hex(deviceMac + String(timestamp));
 }

@@ -16,3 +16,12 @@ void ledIndicateResult(int statusCode);
 // 4 rapid red blinks — a UID failed validateUidFormat() and was
 // rejected before it was ever signed or sent.
 void ledIndicateInvalidUid();
+
+// 2 blue blinks — a START_ATTENDANCE Device_Command was claimed via
+// poll-commands. Blue is otherwise unused so it can't be confused
+// with a tap result (green/orange/red).
+void ledIndicateSessionStart();
+
+// 1 blue blink — an END_SESSION Device_Command was claimed via
+// poll-commands.
+void ledIndicateSessionEnd();

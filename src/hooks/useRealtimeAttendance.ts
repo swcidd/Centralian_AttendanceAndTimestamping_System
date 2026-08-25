@@ -13,8 +13,8 @@ export function useRealtimeAttendance(stubCode: string) {
         {
           event: "INSERT",
           schema: "public",
-          table: "Attendance_Logs",
-          filter: `Stub_Code=eq.${stubCode}`,
+          table: "attendance_logs",
+          filter: `stub_code=eq.${stubCode}`,
         },
         (payload) => {
           setLogs((current) => [...current, payload.new as AttendanceLog]);

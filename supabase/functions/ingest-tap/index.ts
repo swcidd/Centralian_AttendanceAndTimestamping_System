@@ -54,13 +54,13 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // TODO: resolve Student_ID from payload.nfc_uid and Session_ID/Stub_Code
+  // TODO: resolve student_id from payload.nfc_uid and session_id/stub_code
   // from the ACTIVE_ATTENDANCE session open for payload.device_mac before
-  // inserting, per the Active_Sessions gate in the schema.
-  const { error } = await supabase.from("Attendance_Logs").insert({
-    NFC_UID: payload.nfc_uid,
-    Device_MAC: payload.device_mac,
-    Timestamp: new Date(payload.timestamp * 1000).toISOString(),
+  // inserting — both are NOT NULL on attendance_logs per the schema.
+  const { error } = await supabase.from("attendance_logs").insert({
+    nfc_uid: payload.nfc_uid,
+    device_mac: payload.device_mac,
+    timestamp: new Date(payload.timestamp * 1000).toISOString(),
   });
 
   if (error) {

@@ -1,13 +1,33 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CgProfile } from "react-icons/cg";
+import { supabase } from "../lib/supabase";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e: React.SubmitEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
 
-    // Temporary navigation while authentication is not implemented
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    setIsSubmitting(true);
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    setIsSubmitting(false);
+
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+
     navigate("/tracking");
   };
 
@@ -26,14 +46,24 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-3">
+            {error && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+                {error}
+              </p>
+            )}
+
             <input
               type="email"
+              name="email"
+              required
               placeholder="School Email"
               className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
             />
 
             <input
               type="password"
+              name="password"
+              required
               placeholder="Password"
               className="border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1"
             />
@@ -41,9 +71,10 @@ const Login = () => {
             <div className="flex gap-3 pt-1">
               <button
                 type="submit"
-                className="bg-orange flex-1 rounded-md px-3 py-2 text-sm font-medium text-white hover:brightness-95"
+                disabled={isSubmitting}
+                className="bg-orange flex-1 rounded-md px-3 py-2 text-sm font-medium text-white hover:brightness-95 disabled:opacity-60"
               >
-                Login
+                {isSubmitting ? "Logging in..." : "Login"}
               </button>
 
               <Link

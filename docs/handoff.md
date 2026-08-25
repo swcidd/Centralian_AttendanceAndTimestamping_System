@@ -54,6 +54,22 @@ To prevent device MAC address spoofing and replay attacks:
 
 HMAC verification, skew checking, and the insert into `Attendance_Logs` happen server-side in the Supabase Edge Function `supabase/functions/ingest-tap` — chosen over a dedicated Express/Fastify server to avoid a second hosting/deploy pipeline, consistent with the "minimal edge complexity" philosophy.
 
+### Device Command Polling (ESP32 → Backend)
+
+The device has no Supabase Auth session — only the PSK — so it can't read `Device_Commands` directly (`commands_select_authenticated` in `0001_core_schema.sql` is authenticated-only, and there's no client UPDATE policy for ACK at all — that's service-role only by design, per the table's own comment in §8). `supabase/functions/poll-commands` mirrors `ingest-tap`'s exact PSK-HMAC pattern instead of inventing a second trust model:
+
+```json
+{
+  "device_mac": "24:62:AB:F3:89:10",
+  "timestamp": 1787572820,
+  "signature": "<HMAC_SHA256(PSK, device_mac + timestamp)>"
+}
+```
+
+Response is `{ "command": { "command_type": "START_ATTENDANCE" | "END_SESSION", "stub_code": "..." } }` for the oldest `PENDING` row targeting that `device_mac`, or `{ "command": null }` when there's nothing queued. Fetch and ACK happen atomically in this one call — the device has no meaningful local state to reconcile later if a separate confirm step failed, so a two-phase poll-then-confirm round trip isn't worth the complexity here. The atomicity itself lives in `claim_next_device_command()` (`0005_claim_next_device_command.sql`), a `FOR UPDATE SKIP LOCKED` function called via `.rpc()` — not a plain select-then-update from the Edge Function, which can't be made atomic through the PostgREST query builder and would let two overlapping polls for the same device both claim the same row. Same "logic needing real transactional guarantees lives in a SQL function" reasoning as `finalize_absences()` (§6).
+
+The HMAC/skew verification itself now lives in `supabase/functions/_shared/deviceAuth.ts`, shared by both `ingest-tap` and `poll-commands` so the anti-spoofing logic only exists in one place.
+
 ## 5. Repository Layout
 
 The web app stays at the repository root (no `apps/web` workspace) so the existing Cloudflare Pages config (root dir `/`, build `npm run build`, output `dist`) needs zero changes.
@@ -85,7 +101,7 @@ Each course can set two independent, optional thresholds (`Courses.Late_After_Mi
 
 - [x] **Phase 1: Cloud Architecture & Deployment** — Supabase schema, React + TS frontend UI shell, Cloudflare Pages deployment.
 - [ ] **Phase 2: Firmware Implementation** — PN532 I2C wiring, NTP sync, HMAC-SHA256 signing, UID validation, and the tap→POST pipeline are implemented (see §8); still open: physical wiring/flashing on real hardware and an end-to-end tap → ESP32 → Supabase → dashboard verification.
-- [ ] **Phase 3: Frontend Integration** — `TrackingPage` now shows a live roster: enrolled students fetched from Supabase, merged with the open session's `Attendance_Logs`, updated in real time via `useRealtimeAttendance` folded through the `attendanceReducer` pure reducer (`src/lib/utils/attendanceReducer.ts`, per `project-plan.md` §3). Still open: the instructor 2FA/session-gate UI itself — sessions currently start via a manual dashboard button (`TrackingButton`), not the NFC-tap-triggers-password-challenge flow described in §1; and `ActivityPage`/`StudentTrackTable` still render hardcoded empty arrays (historical/summary views, not yet wired).
+- [ ] **Phase 3: Frontend Integration** — `TrackingPage` now shows a live roster: enrolled students fetched from Supabase, merged with the open session's `Attendance_Logs`, updated in real time via `useRealtimeAttendance` folded through the `attendanceReducer` pure reducer (`src/lib/utils/attendanceReducer.ts`, per `project-plan.md` §3). `sessionsApi.ts`'s `startSession`/`closeSession` now also queue a row in `Device_Commands` (`START_ATTENDANCE`/`END_SESSION`) — MVP dashboard→device signaling, deliberately decided over building the instructor 2FA/session-gate flow first; sessions still start via a manual dashboard button (`TrackingButton`), not the NFC-tap-triggers-password-challenge flow described in §1, which stays a later phase. `ingest-tap` remains the actual security gate regardless of whether a device ever polls its command — Device_Commands is a UX/mode signal, not an auth boundary. The backend half of that polling loop is now built (`supabase/functions/poll-commands`, see §4); firmware-side calling of it isn't (firmware territory). `ActivityPage`/`StudentTrackTable` still render hardcoded empty arrays (historical/summary views, not yet wired).
 
 ## 8. Firmware FP Concept Mapping
 

@@ -1,7 +1,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { isClockSkewValid, verifyDeviceSignature } from "../_shared/deviceAuth.ts";
 
 const PSK = Deno.env.get("DEVICE_PSK")!;
-const MAX_CLOCK_SKEW_SECONDS = 30;
 const UNIQUE_VIOLATION = "23505";
 
 interface TapPayload {
@@ -11,39 +11,17 @@ interface TapPayload {
   signature: string;
 }
 
-async function verifySignature(payload: TapPayload): Promise<boolean> {
-  const message = `${payload.device_mac}${payload.timestamp}${payload.nfc_uid}`;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(PSK),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signatureBytes = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(message)
-  );
-  const expected = Array.from(new Uint8Array(signatureBytes))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  return expected === payload.signature.toLowerCase();
-}
-
 Deno.serve(async (req) => {
   const payload: TapPayload = await req.json();
 
-  const skewSeconds = Math.abs(Date.now() / 1000 - payload.timestamp);
-  if (skewSeconds > MAX_CLOCK_SKEW_SECONDS) {
+  if (!isClockSkewValid(payload.timestamp)) {
     return new Response(JSON.stringify({ error: "clock skew too large" }), {
       status: 401,
     });
   }
 
-  const validSignature = await verifySignature(payload);
+  const message = `${payload.device_mac}${payload.timestamp}${payload.nfc_uid}`;
+  const validSignature = await verifyDeviceSignature(PSK, message, payload.signature);
   if (!validSignature) {
     return new Response(JSON.stringify({ error: "invalid signature" }), {
       status: 401,

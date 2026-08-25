@@ -22,7 +22,7 @@
 
 ## 3. Database Schema (PostgreSQL / Supabase)
 
-See [`supabase/migrations/0001_initial_schema.sql`](../supabase/migrations/0001_initial_schema.sql) for the tracked, versioned schema. Summary of tables:
+See [`supabase/migrations/0001_core_schema.sql`](../supabase/migrations/0001_core_schema.sql) for the tracked, versioned schema. Summary of tables:
 
 - `Instructors` — instructor identity + NFC UID for the 2FA gate tap
 - `Students` — master register, `NFC_UID` unique per student
@@ -71,7 +71,16 @@ The web app stays at the repository root (no `apps/web` workspace) so the existi
 
 `firmware/include/config.h` (real WiFi/PSK secrets) is gitignored and generated locally per-developer from `firmware/include/config.h.example` — it is never committed.
 
-## 6. Development Roadmap
+## 6. Attendance Status & Absence Tracking
+
+Each course can set two independent, optional thresholds (`Courses.Late_After_Minutes`, `Courses.Absent_After_Minutes`), both `NULL` (off) by default:
+
+- **PRESENT / LATE** — written only by `ingest-tap`, only at the moment of a real physical tap. If the tap lands after `Started_At + Late_After_Minutes`, it's logged `LATE`; otherwise `PRESENT`. If `Late_After_Minutes` is unset, every tap is `PRESENT`.
+- **ABSENT** — the one status ever written without a physical tap behind it. A `pg_cron` job (`finalize_absences()`, runs every minute) bulk-inserts an `ABSENT` row for every enrolled student with no row yet, once `Started_At + Absent_After_Minutes` passes for their session, then closes the session.
+
+`Attendance_Logs` rows are never overwritten. Safety under the tap-vs-cron race is enforced by the database, not application timing: a partial unique index on `(Session_ID, Student_ID) WHERE Student_ID IS NOT NULL` guarantees one row per student per session — whichever write lands first wins, the other is a no-op. `NFC_UID`/`Device_MAC` are nullable specifically to allow `ABSENT` rows, which have no tap to source them from; a check constraint keeps every other status honest about requiring both.
+
+## 7. Development Roadmap
 
 - [x] **Phase 1: Cloud Architecture & Deployment** — Supabase schema, React + TS frontend UI shell, Cloudflare Pages deployment.
 - [ ] **Phase 2: Firmware Implementation** — Wire PN532 over I2C (SDA→GPIO21, SCL→GPIO22), NTP sync on boot, `mbedtls/md.h` HMAC-SHA256, end-to-end verify: tap → ESP32 HTTPS POST → Supabase → dashboard live update.

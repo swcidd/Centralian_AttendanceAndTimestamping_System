@@ -5,8 +5,10 @@ export interface AttendanceLog {
   session_id: string;
   student_id: string | null;
   stub_code: string;
-  nfc_uid: string;
-  device_mac: string;
+  // Null for ABSENT rows, which are auto-written by finalize_absences()
+  // with no physical tap behind them.
+  nfc_uid: string | null;
+  device_mac: string | null;
   status: string;
   timestamp: string;
 }

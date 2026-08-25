@@ -1,5 +1,5 @@
 -- ============================================================
--- NFCPass MVP Schema — 0001_initial_schema.sql
+-- NFCPass MVP Schema — 0001_core_schema.sql
 -- Applies to: Supabase (PostgreSQL)
 -- Naming: PascalCase tables/columns (matches existing frontend code)
 -- Run in: Supabase Dashboard → SQL Editor (or `supabase db push`)
@@ -32,17 +32,17 @@ CREATE TABLE Devices (
 
 -- ------------------------------------------------------------
 -- 3. Students — rows are created only at card-bind time during a
---    REGISTRATION session, so NFC_UID is always present (no orphans)
+--    REGISTRATION session, so NFC_UID is always present (no orphans).
+--    Only School_ID/First_Name/Last_Name are ever collected from a
+--    student; NFC_UID is bound automatically from the tap itself.
 -- ------------------------------------------------------------
 CREATE TABLE Students (
-    Student_ID     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    School_ID      VARCHAR(50) UNIQUE NOT NULL,
-    First_Name     VARCHAR(100) NOT NULL,
-    Last_Name      VARCHAR(100) NOT NULL,
-    NFC_UID        VARCHAR(100) UNIQUE NOT NULL,
-    Course_Program VARCHAR(100),
-    Year_Level     INT,
-    Created_At     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    Student_ID UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    School_ID  VARCHAR(50) UNIQUE NOT NULL,
+    First_Name VARCHAR(100) NOT NULL,
+    Last_Name  VARCHAR(100) NOT NULL,
+    NFC_UID    VARCHAR(100) UNIQUE NOT NULL,
+    Created_At TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ------------------------------------------------------------
@@ -82,7 +82,6 @@ CREATE TABLE Active_Sessions (
     Device_MAC  VARCHAR(50) NOT NULL REFERENCES Devices(Device_MAC),
     Status      VARCHAR(30) NOT NULL DEFAULT 'ACTIVE_ATTENDANCE', -- ACTIVE_ATTENDANCE | REGISTRATION | CLOSED
     Started_At  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    Expires_At  TIMESTAMPTZ NOT NULL,
     Created_By  UUID REFERENCES Profiles(Profile_ID)
 );
 

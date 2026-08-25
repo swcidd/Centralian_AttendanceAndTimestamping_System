@@ -1,5 +1,5 @@
 -- ============================================================
--- 0002_absence_tracking.sql
+-- 0002_attendance_thresholds.sql
 -- Adds configurable late/absent thresholds per course and a
 -- pg_cron job that auto-marks students absent once their
 -- course's absent threshold has elapsed with no tap.

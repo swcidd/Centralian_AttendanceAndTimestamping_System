@@ -20,6 +20,14 @@ void setup() {
   Serial.begin(115200);
   ledBegin();
 
+  // Init NFC first — bus is clean before WiFi radio starts drawing power.
+  if (!nfcBegin()) {
+    Serial.println("PN532 not found");
+  }
+
+  // Reduce WiFi TX power to ease 3.3V rail load.
+  WiFi.setTxPower(WIFI_POWER_5dBm);
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long wifiStartMillis = millis();
   while (WiFi.status() != WL_CONNECTED) {
@@ -31,12 +39,9 @@ void setup() {
     }
     delay(500);
   }
+  Serial.println("WiFi connected");
 
   timeSyncBegin();
-
-  if (!nfcBegin()) {
-    Serial.println("PN532 not found");
-  }
 }
 
 void loop() {

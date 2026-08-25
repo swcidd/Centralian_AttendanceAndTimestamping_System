@@ -55,6 +55,9 @@ void scanBus() {
     Serial.println("   - SDA -> GPIO8, SCL -> GPIO9 (not GPIO21/22)");
     Serial.println("   - PN532 VCC -> 3V3, shared GND with board");
     Serial.println("   - DIP switches in I2C mode (SW1=ON, SW2=OFF)");
+    Serial.println("   - Pull-up resistors on SDA/SCL -- many bare PN532");
+    Serial.println("     breakouts don't populate them for I2C mode; try");
+    Serial.println("     ~4.7k ohm from SDA and SCL to 3V3 if unsure");
   }
   Serial.println();
 }

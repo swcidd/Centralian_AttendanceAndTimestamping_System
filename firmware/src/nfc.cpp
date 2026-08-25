@@ -13,12 +13,18 @@ static Adafruit_PN532 nfc(-1, -1);
 
 bool nfcBegin() {
   Wire.begin(PN532_SDA_PIN, PN532_SCL_PIN);
+  Wire.setClock(100000);  // 100 kHz — more robust under WiFi RF noise
   nfc.begin();
-  if (nfc.getFirmwareVersion() == 0) {
-    return false;
+
+  // Retry getFirmwareVersion — WiFi TX can momentarily corrupt the bus
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    if (nfc.getFirmwareVersion() != 0) {
+      nfc.SAMConfig();
+      return true;
+    }
+    delay(200);
   }
-  nfc.SAMConfig();
-  return true;
+  return false;
 }
 
 String nfcReadUid() {

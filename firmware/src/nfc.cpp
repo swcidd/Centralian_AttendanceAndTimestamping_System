@@ -7,7 +7,11 @@ static Adafruit_PN532 nfc(PN532_SDA_PIN, PN532_SCL_PIN);
 
 bool nfcBegin() {
   nfc.begin();
-  return nfc.getFirmwareVersion() != 0;
+  if (nfc.getFirmwareVersion() == 0) {
+    return false;
+  }
+  nfc.SAMConfig();
+  return true;
 }
 
 String nfcReadUid() {

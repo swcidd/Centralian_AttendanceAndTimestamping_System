@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 
-bool postTapEvent(const String &deviceMac, unsigned long timestamp, const String &nfcUid, const String &signature) {
+int postTapEvent(const String &deviceMac, unsigned long timestamp, const String &nfcUid, const String &signature) {
   JsonDocument doc;
   doc["device_mac"] = deviceMac;
   doc["nfc_uid"] = nfcUid;
@@ -19,5 +19,5 @@ bool postTapEvent(const String &deviceMac, unsigned long timestamp, const String
   int statusCode = http.POST(body);
   http.end();
 
-  return statusCode >= 200 && statusCode < 300;
+  return statusCode;
 }

@@ -2,15 +2,32 @@
 #include <WiFi.h>
 #include "config.h"
 #include "crypto.h"
+#include "led.h"
 #include "net.h"
 #include "nfc.h"
 #include "time_sync.h"
 
+namespace {
+const unsigned long WIFI_TIMEOUT_MS = 20000;
+const unsigned long TAP_DEBOUNCE_MS = 3000;
+
+String lastUid;
+unsigned long lastTapMillis = 0;
+}  // namespace
+
 void setup() {
   Serial.begin(115200);
+  ledBegin();
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  unsigned long wifiStartMillis = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - wifiStartMillis > WIFI_TIMEOUT_MS) {
+      Serial.println("WiFi connect timed out, retrying...");
+      WiFi.disconnect();
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      wifiStartMillis = millis();
+    }
     delay(500);
   }
 
@@ -24,12 +41,22 @@ void setup() {
 void loop() {
   String uid = nfcReadUid();
   if (uid.length() == 0) {
+    lastUid = "";
     return;
   }
+
+  unsigned long now = millis();
+  if (uid == lastUid && (now - lastTapMillis) < TAP_DEBOUNCE_MS) {
+    return;
+  }
+  lastUid = uid;
+  lastTapMillis = now;
 
   unsigned long timestamp = timeSyncNowUtc();
   String deviceMac = WiFi.macAddress();
   String signature = signPayload(deviceMac, timestamp, uid);
 
-  postTapEvent(deviceMac, timestamp, uid, signature);
+  int statusCode = postTapEvent(deviceMac, timestamp, uid, signature);
+  Serial.printf("Tap %s -> HTTP %d\n", uid.c_str(), statusCode);
+  ledIndicateResult(statusCode);
 }

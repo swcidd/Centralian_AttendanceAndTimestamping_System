@@ -39,7 +39,7 @@ const Signup = () => {
 
     // Email confirmation is on by default, so signUp() won't return a live
     // session until the instructor confirms — send them to Login either way.
-    navigate(data.session ? "/tracking" : "/login");
+    navigate(data.session ? "/courses" : "/login");
   };
 
   return (

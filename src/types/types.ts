@@ -22,7 +22,7 @@ export interface Activity {
 };
 
 export interface Course {
-  stub: number;
+  stub: string;
   name: string;
   schedule: string;
   instructor: string;

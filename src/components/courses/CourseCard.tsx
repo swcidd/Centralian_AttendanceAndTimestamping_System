@@ -1,5 +1,5 @@
 interface CourseCardProps {
-  stub: number;
+  stub: string;
   name: string;
   schedule: string;
   instructor: string;

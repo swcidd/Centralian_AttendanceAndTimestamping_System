@@ -8,7 +8,7 @@ interface CourseCardProps {
 
 const CourseCard = ({ stub, name, schedule, instructor, onDelete }: CourseCardProps) => {
   return (
-    <div className="border-tan transiton rounded-xl border bg-white p-5 shadow-sm hover:-translate-y-1 hover:shadow-md">
+    <div className="border-tan transition rounded-xl border bg-white p-5 shadow-sm hover:-translate-y-1 hover:shadow-md">
       <div className="flex items-center justify-between">
         <p className="text-orange text-sm font-medium">Stub: {stub}</p>
         <button

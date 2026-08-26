@@ -76,7 +76,12 @@ CardData nfcReadData() {
   uint8_t payload[96];
   for (uint8_t i = 0; i < 6; i++) {
     uint8_t block = REGISTRATION_DATA_BLOCKS[i];
-    if (!nfc.mifareclassic_AuthenticateBlock(uid, uidLength, block, MIFARE_CMD_AUTH_A,
+    // The library's keyNumber param is a boolean-ish selector, not the
+    // raw PN532 command byte: internally it does
+    // (keyNumber) ? MIFARE_CMD_AUTH_B : MIFARE_CMD_AUTH_A, so passing
+    // MIFARE_CMD_AUTH_A here (0x60, truthy) actually selected Key B —
+    // opposite of every comment in this file. 0 is Key A.
+    if (!nfc.mifareclassic_AuthenticateBlock(uid, uidLength, block, 0,
                                               defaultMifareKey)) {
       Serial.printf("Registration card auth failed on block %d\n", block);
       return CardData{hex, "", "", "", false};

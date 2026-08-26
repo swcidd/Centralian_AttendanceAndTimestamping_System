@@ -72,3 +72,18 @@ export async function createCourse(input: NewCourseInput) {
 
   if (error) throw error;
 }
+
+const FOREIGN_KEY_VIOLATION = "23503";
+
+export async function deleteCourse(stubCode: string): Promise<void> {
+  const { error } = await supabase.from("courses").delete().eq("stub_code", stubCode);
+
+  if (error) {
+    if (error.code === FOREIGN_KEY_VIOLATION) {
+      throw new Error(
+        "This course has attendance records and can't be deleted."
+      );
+    }
+    throw error;
+  }
+}

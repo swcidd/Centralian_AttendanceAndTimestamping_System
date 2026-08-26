@@ -25,10 +25,6 @@ const CourseToolbar = ({ onCourseAdded }: CourseToolbarProps) => {
         >
           Add Course
         </button>
-
-        <button className="rounded-lg border border-red-300 px-5 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50">
-          Delete
-        </button>
       </div>
 
       {isModalOpen && (

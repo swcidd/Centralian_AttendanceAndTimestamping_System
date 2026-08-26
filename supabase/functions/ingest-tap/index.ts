@@ -55,7 +55,7 @@ async function handleRegistration(
     const { data: newStudent, error: insertError } = await supabase
       .from("students")
       .insert({
-        school_id,
+        student_id: school_id,
         first_name,
         last_name,
         nfc_uid: payload.nfc_uid,
@@ -167,19 +167,64 @@ Deno.serve(async (req) => {
       .maybeSingle(),
   ]);
 
+  let studentId = student?.student_id ?? null;
+
+  // Auto-register: if the card carries student_info and no matching
+  // student row exists yet, create it (and enroll them) on the fly so
+  // attendance taps for pre-encoded cards aren't silently lost as UNKNOWN.
+  if (studentId == null && payload.student_info) {
+    const { school_id, first_name, last_name } = payload.student_info;
+
+    const { data: newStudent, error: insertError } = await supabase
+      .from("students")
+      .insert({
+        student_id: school_id,
+        first_name,
+        last_name,
+        nfc_uid: payload.nfc_uid,
+      })
+      .select("student_id")
+      .single();
+
+    if (insertError) {
+      if (insertError.code === UNIQUE_VIOLATION) {
+        // Concurrent auto-registration or prior registration — fetch.
+        const { data: existing } = await supabase
+          .from("students")
+          .select("student_id")
+          .eq("nfc_uid", payload.nfc_uid)
+          .single();
+        studentId = existing?.student_id ?? null;
+      } else {
+        return new Response(JSON.stringify({ error: insertError.message }), {
+          status: 500,
+        });
+      }
+    } else {
+      studentId = newStudent.student_id;
+    }
+
+    if (studentId) {
+      await supabase.from("enrollments").upsert(
+        { stub_code: session.stub_code, student_id: studentId },
+        { onConflict: "stub_code,student_id", ignoreDuplicates: true }
+      );
+    }
+  }
+
   const tapTime = new Date(payload.timestamp * 1000);
   const lateAfterMinutes = course?.late_after_minutes ?? null;
   const isLate =
-    student != null &&
+    studentId != null &&
     lateAfterMinutes != null &&
     tapTime.getTime() >=
       new Date(session.started_at).getTime() + lateAfterMinutes * 60_000;
 
-  const status = student == null ? "UNKNOWN" : isLate ? "LATE" : "PRESENT";
+  const status = studentId == null ? "UNKNOWN" : isLate ? "LATE" : "PRESENT";
 
   const { error: insertError } = await supabase.from("attendance_logs").insert({
     session_id: session.session_id,
-    student_id: student?.student_id ?? null,
+    student_id: studentId,
     stub_code: session.stub_code,
     nfc_uid: payload.nfc_uid,
     device_mac: payload.device_mac,

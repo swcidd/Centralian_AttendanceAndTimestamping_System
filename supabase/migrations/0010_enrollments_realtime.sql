@@ -1,0 +1,14 @@
+-- ============================================================
+-- 0010_enrollments_realtime.sql
+-- TrackingPage subscribes to postgres_changes INSERT events on
+-- Enrollments to turn the roster table into a live registration list
+-- (see src/pages/TrackingPage.tsx). That subscription silently never
+-- fires: 0001_core_schema.sql added Attendance_Logs and
+-- Device_Commands to the supabase_realtime publication, but not
+-- Enrollments — Realtime only broadcasts postgres_changes for tables
+-- explicitly in that publication, so a new enrollment created during
+-- registration mode never reaches the dashboard until the teacher
+-- manually reloads the page, even though ingest-tap's REGISTRATION
+-- branch creates the row correctly.
+-- ============================================================
+ALTER PUBLICATION supabase_realtime ADD TABLE public.Enrollments;

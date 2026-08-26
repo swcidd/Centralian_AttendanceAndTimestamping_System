@@ -96,18 +96,48 @@ CardData nfcReadData() {
   size_t len = 0;
   while (len < sizeof(payload) && payload[len] != 0) len++;
 
+  // Try JSON first (encode_card.py output).
+  const char *raw = reinterpret_cast<const char *>(payload);
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, reinterpret_cast<const char *>(payload), len);
-  if (err) {
-    Serial.printf("Registration card JSON parse failed: %s\n", err.c_str());
-    return CardData{hex, "", "", "", false};
+  DeserializationError err = deserializeJson(doc, raw, len);
+  if (!err) {
+    CardData result;
+    result.uid = hex;
+    result.schoolId = doc["school_id"].as<String>();
+    result.firstName = doc["first_name"].as<String>();
+    result.lastName = doc["last_name"].as<String>();
+    result.valid = true;
+    return result;
   }
 
-  CardData result;
-  result.uid = hex;
-  result.schoolId = doc["school_id"].as<String>();
-  result.firstName = doc["first_name"].as<String>();
-  result.lastName = doc["last_name"].as<String>();
-  result.valid = true;
-  return result;
+  // Fallback: newline-separated plain text (school_id\nfirst_name\nlast_name)
+  // as written by NFC Tools or similar apps.
+  String text(raw, len);
+  text.trim();
+  String lines[3];
+  int lineCount = 0;
+  int start = 0;
+  for (int i = 0; i <= (int)text.length() && lineCount < 3; i++) {
+    if (i == (int)text.length() || text[i] == '\n') {
+      String line = text.substring(start, i);
+      line.trim();
+      if (line.length() > 0) {
+        lines[lineCount++] = line;
+      }
+      start = i + 1;
+    }
+  }
+
+  if (lineCount == 3) {
+    CardData result;
+    result.uid = hex;
+    result.schoolId = lines[0];
+    result.firstName = lines[1];
+    result.lastName = lines[2];
+    result.valid = true;
+    return result;
+  }
+
+  Serial.printf("Card data: not JSON and not 3-line plain text (%d lines)\n", lineCount);
+  return CardData{hex, "", "", "", false};
 }

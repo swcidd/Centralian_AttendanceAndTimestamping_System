@@ -57,6 +57,19 @@ export async function startSession(
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
+  // A session left open from an earlier run (page closed mid-session,
+  // a crash, manual testing) would otherwise leave two open rows for
+  // this course once the new one is inserted below — breaking
+  // getActiveSession()'s .maybeSingle() with a "multiple rows" error
+  // for anyone who loads this course afterward. Closing any stale open
+  // session first keeps starting a new one idempotent.
+  const { error: closeStaleError } = await supabase
+    .from("active_sessions")
+    .update({ status: "CLOSED" })
+    .eq("stub_code", stubCode)
+    .in("status", ["ACTIVE_ATTENDANCE", "REGISTRATION"]);
+  if (closeStaleError) throw closeStaleError;
+
   const { error } = await supabase.from("active_sessions").insert({
     stub_code: stubCode,
     device_mac: deviceMac,

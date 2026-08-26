@@ -28,7 +28,7 @@ const Login = () => {
       return;
     }
 
-    navigate("/courses");
+    navigate("/tracking");
   };
 
   return (

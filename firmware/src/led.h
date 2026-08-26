@@ -25,3 +25,8 @@ void ledIndicateSessionStart();
 // 1 blue blink — an END_SESSION Device_Command was claimed via
 // poll-commands.
 void ledIndicateSessionEnd();
+
+// 3 cyan blinks — a START_REGISTRATION Device_Command was claimed.
+// Distinct from both the tap-result colors and the session-start/end
+// blue so a bystander can tell registration mode is active.
+void ledIndicateRegistration();

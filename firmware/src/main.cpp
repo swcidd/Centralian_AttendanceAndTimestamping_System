@@ -9,6 +9,12 @@
 #include "time_sync.h"
 #include "validation.h"
 
+// File scope (not inside the anonymous namespace below) so it has
+// external linkage — commands.h declares it extern, letting the
+// command handler in commands.cpp flip it on START_REGISTRATION /
+// off on START_ATTENDANCE and END_SESSION.
+bool registrationMode = false;
+
 namespace {
 const unsigned long WIFI_TIMEOUT_MS = 20000;
 const unsigned long TAP_DEBOUNCE_MS = 3000;
@@ -41,12 +47,41 @@ void setup() {
     delay(500);
   }
   Serial.println("WiFi connected");
+  Serial.println("MAC: " + WiFi.macAddress());
 
   timeSyncBegin();
 }
 
 void loop() {
   pollDeviceCommandsIfDue();
+
+  if (registrationMode) {
+    CardData card = nfcReadData();
+    if (card.uid.length() == 0) return;
+    if (!card.valid) {
+      Serial.println("Registration card unreadable or malformed");
+      ledIndicateInvalidUid();
+      return;
+    }
+
+    unsigned long now = millis();
+    if (card.uid == lastUid && (now - lastTapMillis) < TAP_DEBOUNCE_MS) {
+      return;
+    }
+    lastUid = card.uid;
+    lastTapMillis = now;
+
+    unsigned long timestamp = timeSyncNowUtc();
+    String deviceMac = WiFi.macAddress();
+    String signature = signPayload(deviceMac, timestamp, card.uid);
+
+    int statusCode = postTapEvent(deviceMac, timestamp, card.uid, signature, card.schoolId,
+                                  card.firstName, card.lastName);
+    Serial.printf("Register %s (%s %s) -> HTTP %d\n", card.uid.c_str(),
+                  card.firstName.c_str(), card.lastName.c_str(), statusCode);
+    ledIndicateResult(statusCode);
+    return;
+  }
 
   String rawUid = nfcReadUid();
   if (rawUid.length() == 0) {

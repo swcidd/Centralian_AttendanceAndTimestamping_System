@@ -30,14 +30,19 @@ void pollDeviceCommandsIfDue() {
                 command.stubCode.c_str());
 
   if (command.commandType == "START_ATTENDANCE") {
+    registrationMode = false;
     ledIndicateSessionStart();
+  } else if (command.commandType == "START_REGISTRATION") {
+    registrationMode = true;
+    ledIndicateRegistration();
   } else if (command.commandType == "END_SESSION") {
+    registrationMode = false;
     ledIndicateSessionEnd();
   } else {
-    // START_REGISTRATION and any future command types aren't handled
-    // by this device yet — leaving them ACKNOWLEDGED server-side
-    // (poll-commands already claimed it) rather than silently retrying
-    // is a deliberate tradeoff of the current minimal-edge design.
+    // Any future command type isn't handled by this device yet —
+    // leaving it ACKNOWLEDGED server-side (poll-commands already
+    // claimed it) rather than silently retrying is a deliberate
+    // tradeoff of the current minimal-edge design.
     Serial.printf("Unrecognized command type, ignoring: %s\n",
                   command.commandType.c_str());
   }

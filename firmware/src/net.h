@@ -5,7 +5,12 @@
 // Posts the signed tap payload to API_ENDPOINT_URL over HTTPS.
 // Returns the HTTP status code, or a negative HTTPClient error code if
 // the request itself failed (e.g. connection refused, DNS failure).
-int postTapEvent(const String &deviceMac, unsigned long timestamp, const String &nfcUid, const String &signature);
+// schoolId/firstName/lastName are only sent (as a nested student_info
+// object) when schoolId is non-empty — registration mode passes them,
+// attendance mode's existing 4-arg call sites are unaffected.
+int postTapEvent(const String &deviceMac, unsigned long timestamp, const String &nfcUid,
+                 const String &signature, const String &schoolId = "",
+                 const String &firstName = "", const String &lastName = "");
 
 // Result of polling poll-commands for this device's oldest PENDING
 // Device_Commands row (see 0001_core_schema.sql §8). present is false

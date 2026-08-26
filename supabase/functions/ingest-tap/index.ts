@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { isClockSkewValid, verifyDeviceSignature } from "../_shared/deviceAuth.ts";
 
 const PSK = Deno.env.get("DEVICE_PSK")!;
@@ -9,6 +9,104 @@ interface TapPayload {
   nfc_uid: string;
   timestamp: number;
   signature: string;
+  student_info?: {
+    school_id: string;
+    first_name: string;
+    last_name: string;
+  };
+}
+
+interface RegistrationSession {
+  session_id: string;
+  stub_code: string;
+}
+
+// A REGISTRATION-mode tap carries the card's own school_id/first_name/
+// last_name (read off the card by the firmware, not typed by anyone),
+// so it creates the Student row and enrolls them in one round trip —
+// no separate "add student" step. Re-tapping an already-registered
+// card just confirms/re-enrolls rather than erroring, since a student
+// may legitimately tap once per course they're being registered into.
+async function handleRegistration(
+  supabase: SupabaseClient,
+  session: RegistrationSession,
+  payload: TapPayload
+): Promise<Response> {
+  if (!payload.student_info) {
+    return new Response(
+      JSON.stringify({ error: "registration mode requires student_info in payload" }),
+      { status: 400 }
+    );
+  }
+
+  const { school_id, first_name, last_name } = payload.student_info;
+
+  const { data: existingStudent } = await supabase
+    .from("students")
+    .select("student_id")
+    .eq("nfc_uid", payload.nfc_uid)
+    .maybeSingle();
+
+  let studentId: string;
+
+  if (existingStudent) {
+    studentId = existingStudent.student_id;
+  } else {
+    const { data: newStudent, error: insertError } = await supabase
+      .from("students")
+      .insert({
+        school_id,
+        first_name,
+        last_name,
+        nfc_uid: payload.nfc_uid,
+      })
+      .select("student_id")
+      .single();
+
+    if (insertError) {
+      // Concurrent registration tap for the same new card can race here —
+      // both requests see "no existing student" and both try to insert.
+      // Whichever loses re-fetches by nfc_uid instead of failing outright.
+      if (insertError.code === UNIQUE_VIOLATION) {
+        const { data: raceWinner, error: refetchError } = await supabase
+          .from("students")
+          .select("student_id")
+          .eq("nfc_uid", payload.nfc_uid)
+          .single();
+        if (refetchError) {
+          return new Response(JSON.stringify({ error: refetchError.message }), {
+            status: 500,
+          });
+        }
+        studentId = raceWinner.student_id;
+      } else {
+        return new Response(JSON.stringify({ error: insertError.message }), {
+          status: 500,
+        });
+      }
+    } else {
+      studentId = newStudent.student_id;
+    }
+  }
+
+  const { error: enrollError } = await supabase.from("enrollments").upsert(
+    { stub_code: session.stub_code, student_id: studentId },
+    { onConflict: "stub_code,student_id", ignoreDuplicates: true }
+  );
+
+  if (enrollError) {
+    return new Response(JSON.stringify({ error: enrollError.message }), {
+      status: 500,
+    });
+  }
+
+  return new Response(
+    JSON.stringify({
+      status: "registered",
+      student: { student_id: studentId, school_id, first_name, last_name },
+    }),
+    { status: 201 }
+  );
 }
 
 Deno.serve(async (req) => {
@@ -35,9 +133,9 @@ Deno.serve(async (req) => {
 
   const { data: session, error: sessionError } = await supabase
     .from("active_sessions")
-    .select("session_id, stub_code, started_at")
+    .select("session_id, stub_code, started_at, status")
     .eq("device_mac", payload.device_mac)
-    .eq("status", "ACTIVE_ATTENDANCE")
+    .in("status", ["ACTIVE_ATTENDANCE", "REGISTRATION"])
     .maybeSingle();
 
   if (sessionError) {
@@ -47,9 +145,13 @@ Deno.serve(async (req) => {
   }
   if (!session) {
     return new Response(
-      JSON.stringify({ error: "no active attendance session for this device" }),
+      JSON.stringify({ error: "no active session for this device" }),
       { status: 409 }
     );
+  }
+
+  if (session.status === "REGISTRATION") {
+    return await handleRegistration(supabase, session, payload);
   }
 
   const [{ data: course }, { data: student }] = await Promise.all([

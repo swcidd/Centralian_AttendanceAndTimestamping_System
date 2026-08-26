@@ -1,9 +1,12 @@
 import { supabase } from "../lib/supabase";
 
+export type SessionMode = "ACTIVE_ATTENDANCE" | "REGISTRATION";
+
 export interface ActiveSession {
   sessionId: string;
   stubCode: string;
   deviceMac: string;
+  status: SessionMode;
 }
 
 export async function getActiveSession(
@@ -11,9 +14,9 @@ export async function getActiveSession(
 ): Promise<ActiveSession | null> {
   const { data, error } = await supabase
     .from("active_sessions")
-    .select("session_id, stub_code, device_mac")
+    .select("session_id, stub_code, device_mac, status")
     .eq("stub_code", stubCode)
-    .eq("status", "ACTIVE_ATTENDANCE")
+    .in("status", ["ACTIVE_ATTENDANCE", "REGISTRATION"])
     .maybeSingle();
 
   if (error) throw error;
@@ -23,6 +26,7 @@ export async function getActiveSession(
     sessionId: data.session_id,
     stubCode: data.stub_code,
     deviceMac: data.device_mac,
+    status: data.status as SessionMode,
   };
 }
 
@@ -34,7 +38,7 @@ export async function getActiveSession(
 async function queueDeviceCommand(
   deviceMac: string,
   stubCode: string,
-  commandType: "START_ATTENDANCE" | "END_SESSION"
+  commandType: "START_ATTENDANCE" | "END_SESSION" | "START_REGISTRATION"
 ): Promise<void> {
   const { error } = await supabase.from("device_commands").insert({
     device_mac: deviceMac,
@@ -47,7 +51,8 @@ async function queueDeviceCommand(
 
 export async function startSession(
   stubCode: string,
-  deviceMac: string
+  deviceMac: string,
+  mode: SessionMode = "ACTIVE_ATTENDANCE"
 ): Promise<void> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
@@ -55,13 +60,15 @@ export async function startSession(
   const { error } = await supabase.from("active_sessions").insert({
     stub_code: stubCode,
     device_mac: deviceMac,
-    status: "ACTIVE_ATTENDANCE",
+    status: mode,
     created_by: userData.user?.id,
   });
 
   if (error) throw error;
 
-  await queueDeviceCommand(deviceMac, stubCode, "START_ATTENDANCE");
+  const commandType =
+    mode === "REGISTRATION" ? "START_REGISTRATION" : "START_ATTENDANCE";
+  await queueDeviceCommand(deviceMac, stubCode, commandType);
 }
 
 export async function closeSession(sessionId: string): Promise<void> {

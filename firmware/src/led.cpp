@@ -43,3 +43,7 @@ void ledIndicateSessionStart() {
 void ledIndicateSessionEnd() {
   blink(1, pixel.Color(0, 0, 255));
 }
+
+void ledIndicateRegistration() {
+  blink(3, pixel.Color(0, 255, 255));
+}

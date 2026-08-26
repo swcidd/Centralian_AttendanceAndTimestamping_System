@@ -5,13 +5,18 @@
 // the full WiFi → NTP → NFC → HMAC pipeline before the backend
 // endpoint exists. Returns 200 so the LED shows green.
 
-int postTapEvent(const String &deviceMac, unsigned long timestamp,
-                 const String &nfcUid, const String &signature) {
+int postTapEvent(const String &deviceMac, unsigned long timestamp, const String &nfcUid,
+                 const String &signature, const String &schoolId, const String &firstName,
+                 const String &lastName) {
   Serial.println("[DRY RUN] Signed payload:");
   Serial.printf("  device_mac : %s\n", deviceMac.c_str());
   Serial.printf("  nfc_uid    : %s\n", nfcUid.c_str());
   Serial.printf("  timestamp  : %lu\n", timestamp);
   Serial.printf("  signature  : %s\n", signature.c_str());
+  if (schoolId.length() > 0) {
+    Serial.printf("  student    : %s %s (%s)\n", firstName.c_str(), lastName.c_str(),
+                  schoolId.c_str());
+  }
   Serial.println();
   return 200;
 }

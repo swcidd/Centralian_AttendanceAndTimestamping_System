@@ -3,9 +3,15 @@ import AddCourseModal from "./AddCourseModal";
 
 interface CourseToolbarProps {
   onCourseAdded: () => void;
+  searchTerm: string;
+  onSearchChange: (term: string) => void;
 }
 
-const CourseToolbar = ({ onCourseAdded }: CourseToolbarProps) => {
+const CourseToolbar = ({
+  onCourseAdded,
+  searchTerm,
+  onSearchChange,
+}: CourseToolbarProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
@@ -13,6 +19,8 @@ const CourseToolbar = ({ onCourseAdded }: CourseToolbarProps) => {
       <div className="flex-1">
         <input
           type="text"
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search courses..."
           className="border-tan text-navy focus:border-orange focus:ring-orange/20 w-full max-w-md rounded-lg border bg-white px-4 py-2.5 text-sm outline-none focus:ring-2"
         />

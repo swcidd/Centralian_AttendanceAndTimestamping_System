@@ -6,11 +6,13 @@ import StudentTrackTable from "../components/courses/StudentTrackTable";
 
 import { deleteCourse, fetchCourses } from "../services/coursesApi";
 import { getErrorMessage } from "../lib/errors";
+import { matchesCourseSearch } from "../lib/utils/courseSearch";
 import type { Course } from "../types/types";
 
 const CoursesPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const loadCourses = () => {
     fetchCourses()
@@ -35,17 +37,23 @@ const CoursesPage = () => {
     }
   };
 
+  const filteredCourses = courses.filter(matchesCourseSearch(searchTerm));
+
   return (
     <div className="bg-cream min-h-screen p-6">
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="min-w-0">
           <div className="border-tan overflow-hidden rounded-xl border bg-white shadow-sm">
-            <CourseToolbar onCourseAdded={loadCourses} />
+            <CourseToolbar
+              onCourseAdded={loadCourses}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+            />
             <div className="p-5">
               {error && (
                 <p className="mb-4 text-sm text-red-600">{error}</p>
               )}
-              <CourseGrid courses={courses} onDelete={handleDelete} />
+              <CourseGrid courses={filteredCourses} onDelete={handleDelete} />
             </div>
           </div>
         </section>

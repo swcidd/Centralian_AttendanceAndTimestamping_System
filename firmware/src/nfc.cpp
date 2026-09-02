@@ -252,19 +252,39 @@ bool nfcWriteData(const String& schoolId, const String& firstName,
   memset(payload, 0, sizeof(payload));
   memcpy(payload, json.c_str(), json.length());
 
-  // Authenticate and write all 6 data blocks
+  // Authenticate and write all 6 data blocks, with I2C re-init on failure.
+  // WiFi TX bursts can corrupt the I2C bus mid-transaction — re-init Wire
+  // and retry up to 3 times per block before giving up.
   for (uint8_t i = 0; i < 6; i++) {
     uint8_t block = REGISTRATION_DATA_BLOCKS[i];
-    if (!nfc.mifareclassic_AuthenticateBlock(uid, uidLength, block, 0,
-                                              defaultMifareKey)) {
-      Serial.printf("[nfcWriteData] Auth FAILED on block %d\n", block);
+    bool blockDone = false;
+    for (uint8_t attempt = 0; attempt < 3 && !blockDone; attempt++) {
+      if (attempt > 0) {
+        Serial.printf("[nfcWriteData] Retry block %d (attempt %d)\n", block, attempt + 1);
+        Wire.end();
+        delay(50);
+        Wire.begin(PN532_SDA_PIN, PN532_SCL_PIN);
+        Wire.setClock(100000);
+        nfc.begin();
+        nfc.SAMConfig();
+        delay(100);
+      }
+      if (!nfc.mifareclassic_AuthenticateBlock(uid, uidLength, block, 0,
+                                                defaultMifareKey)) {
+        Serial.printf("[nfcWriteData] Auth FAILED on block %d (attempt %d)\n", block, attempt + 1);
+        continue;
+      }
+      if (!nfc.mifareclassic_WriteDataBlock(block, payload + i * 16)) {
+        Serial.printf("[nfcWriteData] Write FAILED on block %d (attempt %d)\n", block, attempt + 1);
+        continue;
+      }
+      blockDone = true;
+      Serial.printf("[nfcWriteData] Block %d written OK\n", block);
+    }
+    if (!blockDone) {
+      Serial.printf("[nfcWriteData] Gave up on block %d after 3 attempts\n", block);
       return false;
     }
-    if (!nfc.mifareclassic_WriteDataBlock(block, payload + i * 16)) {
-      Serial.printf("[nfcWriteData] Write FAILED on block %d\n", block);
-      return false;
-    }
-    Serial.printf("[nfcWriteData] Block %d written OK\n", block);
   }
 
   Serial.printf("[nfcWriteData] Success — %d bytes written to sectors 1-2\n", json.length());

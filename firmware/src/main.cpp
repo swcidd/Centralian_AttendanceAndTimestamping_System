@@ -21,6 +21,37 @@ const unsigned long TAP_DEBOUNCE_MS = 3000;
 
 String lastUid;
 unsigned long lastTapMillis = 0;
+bool writeMode = false;
+String pendingSchoolId, pendingFirstName, pendingLastName;
+
+void printTapHeader(const char* mode) {
+  Serial.println();
+  Serial.println(F("========================================"));
+  Serial.printf(  "  NFC CARD SCANNED [%s]\n", mode);
+  Serial.println(F("========================================"));
+}
+
+void printCardData(const CardData& card, unsigned long timestamp,
+                   const String& deviceMac, const String& signature,
+                   int statusCode) {
+  Serial.printf("  UID         : %s\n", card.uid.c_str());
+  if (card.valid) {
+    Serial.printf("  Name        : %s %s\n", card.firstName.c_str(), card.lastName.c_str());
+    Serial.printf("  School ID   : %s\n", card.schoolId.c_str());
+    Serial.printf("  Card Data   : VALID (JSON parsed)\n");
+  } else {
+    Serial.println(F("  Name        : (unknown card)"));
+    Serial.println(F("  School ID   : -"));
+    Serial.println(F("  Card Data   : NO DATA — card has no JSON written to sectors 1-2"));
+    Serial.println(F("  Write JSON  : {\"school_id\":\"...\",\"first_name\":\"...\",\"last_name\":\"...\"}"));
+  }
+  Serial.printf("  Timestamp   : %lu\n", timestamp);
+  Serial.printf("  Device MAC  : %s\n", deviceMac.c_str());
+  Serial.printf("  Signature   : %.16s...\n", signature.c_str());
+  Serial.printf("  HTTP Status : %d\n", statusCode);
+  Serial.println(F("========================================"));
+  Serial.println();
+}
 
 // WiFi.status() only reports the coarse wl_status_t categories (it
 // collapsed our real failure into WL_DISCONNECTED, which just means
@@ -87,6 +118,54 @@ void setup() {
 void loop() {
   pollDeviceCommandsIfDue();
 
+  // Check serial for WRITE command: WRITE|school_id|first_name|last_name
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    if (line.startsWith("WRITE|")) {
+      // Parse: WRITE|school_id|first_name|last_name
+      int p1 = line.indexOf('|', 6);
+      int p2 = line.indexOf('|', p1 + 1);
+      if (p1 > 0 && p2 > p1) {
+        pendingSchoolId = line.substring(6, p1);
+        pendingFirstName = line.substring(p1 + 1, p2);
+        pendingLastName = line.substring(p2 + 1);
+        writeMode = true;
+        Serial.printf("WRITE MODE: school_id=%s name=%s %s\n",
+                      pendingSchoolId.c_str(), pendingFirstName.c_str(),
+                      pendingLastName.c_str());
+        Serial.println("Tap a card to write...");
+      } else {
+        Serial.println("Usage: WRITE|school_id|first_name|last_name");
+      }
+    } else if (line == "CANCEL") {
+      writeMode = false;
+      Serial.println("Write mode cancelled.");
+    }
+  }
+
+  // Write mode: wait for card tap, write JSON
+  if (writeMode) {
+    bool ok = nfcWriteData(pendingSchoolId, pendingFirstName, pendingLastName);
+    writeMode = false;
+    if (ok) {
+      Serial.println("Card written successfully. Tap to verify:");
+      delay(1500);
+      CardData verify = nfcReadData();
+      if (verify.uid.length() > 0) {
+        if (verify.valid) {
+          Serial.printf("VERIFY OK: %s %s (%s)\n", verify.firstName.c_str(),
+                        verify.lastName.c_str(), verify.schoolId.c_str());
+        } else {
+          Serial.println("VERIFY FAILED: card could not be read back");
+        }
+      }
+    } else {
+      Serial.println("Card write failed.");
+    }
+    return;
+  }
+
   if (registrationMode) {
     CardData card = nfcReadData();
     if (card.uid.length() == 0) return;
@@ -109,8 +188,8 @@ void loop() {
 
     int statusCode = postTapEvent(deviceMac, timestamp, card.uid, signature, card.schoolId,
                                   card.firstName, card.lastName);
-    Serial.printf("Register %s (%s %s) -> HTTP %d\n", card.uid.c_str(),
-                  card.firstName.c_str(), card.lastName.c_str(), statusCode);
+    printTapHeader("REGISTER");
+    printCardData(card, timestamp, deviceMac, signature, statusCode);
     ledIndicateResult(statusCode);
     return;
   }
@@ -144,11 +223,10 @@ void loop() {
   if (card.valid) {
     statusCode = postTapEvent(deviceMac, timestamp, uid, signature,
                               card.schoolId, card.firstName, card.lastName);
-    Serial.printf("Tap %s (%s %s) -> HTTP %d\n", uid.c_str(),
-                  card.firstName.c_str(), card.lastName.c_str(), statusCode);
   } else {
     statusCode = postTapEvent(deviceMac, timestamp, uid, signature);
-    Serial.printf("Tap %s -> HTTP %d\n", uid.c_str(), statusCode);
   }
+  printTapHeader("ATTENDANCE");
+  printCardData(card, timestamp, deviceMac, signature, statusCode);
   ledIndicateResult(statusCode);
 }

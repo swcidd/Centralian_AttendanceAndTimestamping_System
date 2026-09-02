@@ -28,3 +28,9 @@ struct CardData {
 // blocks. Used in registration mode; nfcReadUid() stays the lighter
 // attendance-mode path since it doesn't need the auth round trip.
 CardData nfcReadData();
+
+// Writes student JSON to MIFARE Classic sectors 1-2 (blocks 4-6, 8-10)
+// using the factory default key. The JSON is null-padded to 96 bytes.
+// Returns true on success, false if auth or write failed.
+bool nfcWriteData(const String& schoolId, const String& firstName,
+                  const String& lastName);

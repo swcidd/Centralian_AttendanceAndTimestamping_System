@@ -38,3 +38,16 @@ firmware/include/config.h
 
 # Wrangler CLI local state
 .wrangler/
+
+# Docs & AI agent artifacts — DEV BRANCH ONLY.
+# main/staging intentionally do not carry docs/, planning, or prompt
+# files; dev is the canonical home for them. Merging an untracked file
+# from dev back into main requires re-running "git rm -r --cached <file>".
+docs/
+*.prompt.md
+
+# AI agent working directories (kept out of deployment branches)
+.opencode/
+.claude/
+.cursor/
+.agents/

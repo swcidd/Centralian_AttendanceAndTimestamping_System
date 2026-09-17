@@ -41,10 +41,15 @@ firmware/include/config.h
 
 # Docs & AI agent artifacts — DEV BRANCH ONLY.
 # main/staging intentionally do not carry docs/, planning, or prompt
-# files; dev is the canonical home for them. Merging an untracked file
-# from dev back into main requires re-running "git rm -r --cached <file>".
+# files; dev is the canonical home for them. New docs on dev must be
+# added with "git add -f docs/..." (the ignore rule is shared across
+# branches). Merging an untracked file from dev back into main requires
+# re-running "git rm -r --cached <file>".
 docs/
 *.prompt.md
+__pycache__/
+*.pyc
+.venv/
 
 # AI agent working directories (kept out of deployment branches)
 .opencode/

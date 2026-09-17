@@ -84,6 +84,13 @@ const Login = () => {
                 Signup
               </Link>
             </div>
+
+            <Link
+              to="/encode"
+              className="text-navy/60 hover:text-orange block pt-1 text-center text-xs font-medium"
+            >
+              Encode a student card (local encoder)
+            </Link>
           </form>
         </div>
       </main>

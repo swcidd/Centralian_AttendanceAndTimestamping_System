@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import CourseToolbar from "../components/courses/CourseToolbar";
 import CourseGrid from "../components/courses/CourseGrid";
 import StudentTrackTable from "../components/courses/StudentTrackTable";
+import AssignTerminalModal from "../components/courses/AssignTerminalModal";
 
 import { deleteCourse, fetchCourses } from "../services/coursesApi";
 import { getErrorMessage } from "../lib/errors";
@@ -13,6 +14,7 @@ const CoursesPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [assignCourse, setAssignCourse] = useState<Course | null>(null);
 
   const loadCourses = () => {
     fetchCourses()
@@ -37,6 +39,11 @@ const CoursesPage = () => {
     }
   };
 
+  const handleAssign = (stub: string) => {
+    const course = courses.find((c) => c.stub === stub);
+    if (course) setAssignCourse(course);
+  };
+
   const filteredCourses = courses.filter(matchesCourseSearch(searchTerm));
 
   return (
@@ -53,7 +60,11 @@ const CoursesPage = () => {
               {error && (
                 <p className="mb-4 text-sm text-red-600">{error}</p>
               )}
-              <CourseGrid courses={filteredCourses} onDelete={handleDelete} />
+              <CourseGrid
+                courses={filteredCourses}
+                onAssign={handleAssign}
+                onDelete={handleDelete}
+              />
             </div>
           </div>
         </section>
@@ -61,6 +72,14 @@ const CoursesPage = () => {
           <StudentTrackTable />
         </section>
       </div>
+
+      {assignCourse && (
+        <AssignTerminalModal
+          course={assignCourse}
+          onClose={() => setAssignCourse(null)}
+          onAssigned={loadCourses}
+        />
+      )}
     </div>
   );
 };

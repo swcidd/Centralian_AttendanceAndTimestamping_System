@@ -9,8 +9,14 @@ export function pipe<A, B, C, D>(
   bc: (b: B) => C,
   cd: (c: C) => D
 ): D;
-export function pipe(a: unknown, ...fns: Array<(x: unknown) => unknown>) {
-  return fns.reduce((acc, fn) => fn(acc), a);
+// Variadic fallback matching the runtime implementation: the specific
+// overloads above keep 1-3 stage pipelines fully typed; anything longer
+// (or a bare value) still type-checks through this signature. The
+// `(x: never) => unknown` fn type is the widest that still accepts
+// heterogeneous stage functions under strictFunctionTypes.
+export function pipe<A, R = A>(a: A, ...fns: Array<(x: never) => unknown>): R;
+export function pipe(a: unknown, ...fns: Array<(x: never) => unknown>) {
+  return fns.reduce((acc, fn) => fn(acc as never), a);
 }
 
 export function compose<A, B, C>(

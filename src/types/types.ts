@@ -27,4 +27,5 @@ export interface Course {
   schedule: string;
   instructor: string;
   deviceMac: string | null;
+  roomName: string | null;
 }

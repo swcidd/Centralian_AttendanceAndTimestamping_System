@@ -49,6 +49,7 @@ docs/
 *.prompt.md
 __pycache__/
 *.pyc
+.venv/
 
 # AI agent working directories (kept out of deployment branches)
 .opencode/

@@ -32,10 +32,20 @@ nfcpy → ACR122U / PN532 USB reader → MIFARE card
 
 ## Running the bridge
 
+nfcpy is a *library*, so add it with pip inside a venv (pipx won't work —
+it installs CLI apps):
+
 ```bash
-pip install nfcpy          # only dependency
-python3 tools/encoder_server.py          # http://127.0.0.1:8787
-ENCODER_PORT=9000 python3 tools/encoder_server.py   # custom port
+python3 -m venv .venv                 # repo root; .venv/ is gitignored
+.venv/bin/pip install nfcpy           # only dependency
+.venv/bin/python tools/encoder_server.py        # http://127.0.0.1:8787
+ENCODER_PORT=9000 .venv/bin/python tools/encoder_server.py   # custom port
+```
+
+Verify the reader is seen before tapping (expect `"reader": true`):
+
+```bash
+curl -s http://127.0.0.1:8787/health
 ```
 
 The dashboard targets `http://localhost:8787` by default. Point it

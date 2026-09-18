@@ -15,7 +15,7 @@ type Phase = "idle" | "waiting" | "success" | "error";
 const inputClass =
   "border-tan text-navy placeholder:text-navy/50 focus:border-orange focus:ring-orange w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-1";
 
-const MAX_PAYLOAD_BYTES = 96;
+const MAX_PAYLOAD_BYTES = 336;
 
 // Same JSON shape the firmware reads back and tools/encode_card.py writes.
 function payloadBytes(schoolId: string, firstName: string, lastName: string) {

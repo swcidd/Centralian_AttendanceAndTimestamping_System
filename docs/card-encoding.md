@@ -6,27 +6,32 @@ See [`docs/registration-mode-handoff.md`](registration-mode-handoff.md) for how 
 
 ## Card Format
 
-Student data (`school_id`, `first_name`, `last_name`) is stored as a JSON object, null-padded, across **six data blocks spanning two sectors**:
+Student data (`school_id`, `first_name`, `last_name`) is stored as a JSON object, null-padded, across **21 data blocks spanning seven sectors**:
 
 | Sector | Data blocks | Trailer (never written) |
 |---|---|---|
 | 1 | 4, 5, 6 | 7 |
 | 2 | 8, 9, 10 | 11 |
+| 3 | 12, 13, 14 | 15 |
+| 4 | 16, 17, 18 | 19 |
+| 5 | 20, 21, 22 | 23 |
+| 6 | 24, 25, 26 | 27 |
+| 7 | 28, 29, 30 | 31 |
 
-That's 6 × 16 = **96 bytes** of usable payload, authenticated per-sector with the default factory key `0xFFFFFFFFFFFF` (Key A).
+That's 21 × 16 = **336 bytes** of usable payload, authenticated per-sector with the default factory key `0xFFFFFFFFFFFF` (Key A). The JSON key overhead is 47 bytes, leaving **289 bytes** for student data values — comfortably enough for long double-barrelled names.
 
 ```json
 {"school_id":"25-1809-52","first_name":"Sherwin Sid","last_name":"Sañol"}
 ```
 
-Block layout: block 4 = payload bytes 0–15, block 5 = 16–31, block 6 = 32–47, block 8 = 48–63, block 9 = 64–79, block 10 = 80–95.
+Block layout: blocks 4–6 (sector 1) = bytes 0–47, blocks 8–10 (sector 2) = 48–95, blocks 12–14 (sector 3) = 96–143, blocks 16–18 (sector 4) = 144–191, blocks 20–22 (sector 5) = 192–239, blocks 24–26 (sector 6) = 240–287, blocks 28–30 (sector 7) = 288–335.
 
-**Why blocks 7 and 11 are skipped — do not add them back.** On every MIFARE Classic sector, the last of its 4 blocks (block `4N+3`) is the **sector trailer**: Key A, access bits, and Key B, not general storage. This isn't specific to this card or this project — it's true of any MIFARE Classic card. An earlier version of this spec treated sector 1's blocks 4–7 as 64 bytes of uniform data; block 7 is actually sector 1's trailer, so writing a JSON payload there overwrites the keys and access bits, which can **permanently lock the sector**. Restricting each sector to its 3 real data blocks (48 bytes) is also why this spans two sectors instead of one — a single sector's 48 bytes is too tight for realistic names (the example payload above alone is 74–79 bytes depending on JSON formatting).
+**Why blocks 7, 11, 15, 19, 23, 27, and 31 are skipped — do not add them back.** On every MIFARE Classic sector, the last of its 4 blocks (block `4N+3`) is the **sector trailer**: Key A, access bits, and Key B, not general storage. This isn't specific to this card or this project — it's true of any MIFARE Classic card. Writing a JSON payload into a trailer overwrites the keys and access bits, which can **permanently lock the sector**. Each sector therefore has only 3 usable data blocks (48 bytes), so seven sectors are needed for a 336-byte payload.
 
 Requirements for a card to accept encoding:
 - MIFARE Classic 1K (not Ultralight, NTAG, or DESFire — those don't have this sector/key structure)
 - Blank / factory-default keys, or already encoded with this exact layout
-- Both sector 1 and sector 2 must authenticate with Key A = `0xFFFFFFFFFFFF`
+- All seven sectors (1–7) must authenticate with Key A = `0xFFFFFFFFFFFF`
 
 ## Required Hardware
 
@@ -53,7 +58,7 @@ python tools/encode_card.py \
     --last-name "Sañol"
 ```
 
-The script prints `Place card on reader...` and waits. Tap a blank card; it authenticates sector 1, writes blocks 4–6, authenticates sector 2, writes blocks 8–10, then prints each block's raw bytes and a confirmation with the encoded field count and payload size.
+The script prints `Place card on reader...` and waits. Tap a blank card; it authenticates each of sectors 1–7 in turn, writes 3 blocks per sector, then prints a confirmation with the card UID and payload size.
 
 > **Unverified API note:** the `card.authenticate()` / `card.write_block()` calls in `tools/encode_card.py` are written against the expected shape of `nfcpy`'s tag API but have not been run against real `nfcpy` or real hardware yet. Before trusting this against a batch of cards, do a single test encode-then-read-back cycle and confirm against the actual `nfcpy` docs/source if anything doesn't match — same caution you'd apply to any library call that hasn't been exercised for real.
 
@@ -89,8 +94,8 @@ The most common cause is a card that isn't blank — either it already has a rea
 **`Error: expected MifareClassic, got <other type>`**
 The tapped card isn't MIFARE Classic — commonly a MIFARE Ultralight/NTAG card (no sector/key structure at all) or a different vendor's card shipped in the same batch. Check the card packaging/datasheet; Ultralight and Classic cards can look identical.
 
-**`ValueError: Payload too large: N bytes (max 96)`**
-The JSON payload exceeds the 96-byte budget — almost always a long `first_name`/`last_name`. There's no truncation built in on purpose (silently cutting a name is worse than failing loudly); shorten the name fields or reduce JSON overhead (e.g. drop unnecessary whitespace — `json.dumps`'s default separators add a space after each `,`/`:`, which the script does not currently override) if this comes up often.
+**`ValueError: Payload too large: N bytes (max 336)`**
+The JSON payload exceeds the 336-byte budget — extremely unlikely with normal names. There's no truncation built in on purpose (silently cutting a name is worse than failing loudly); shorten the name fields if this comes up.
 
 **Card reads back empty or as garbled JSON on the firmware side**
-Usually means the card was encoded with the *old* single-sector layout (blocks 4–7) or by a modified script that changed the block list — the firmware's `nfcReadData()` (`firmware/src/nfc.cpp`) only reads blocks `{4, 5, 6, 8, 9, 10}`. Re-encode the card with the current `tools/encode_card.py`.
+Usually means the card was encoded with an older layout (sectors 1–2 only) or by a modified script that changed the block list. The firmware's `nfcReadData()` (`firmware/src/nfc.cpp`) reads blocks `{4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25, 26, 28, 29, 30}`. Re-encode the card with the current `tools/encode_card.py`.

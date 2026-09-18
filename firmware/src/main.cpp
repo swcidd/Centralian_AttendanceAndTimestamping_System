@@ -42,7 +42,7 @@ void printCardData(const CardData& card, unsigned long timestamp,
   } else {
     Serial.println(F("  Name        : (unknown card)"));
     Serial.println(F("  School ID   : -"));
-    Serial.println(F("  Card Data   : NO DATA — card has no JSON written to sectors 1-2"));
+    Serial.println(F("  Card Data   : NO DATA — card has no JSON written to sectors 1-7"));
     Serial.println(F("  Write JSON  : {\"school_id\":\"...\",\"first_name\":\"...\",\"last_name\":\"...\"}"));
   }
   Serial.printf("  Timestamp   : %lu\n", timestamp);

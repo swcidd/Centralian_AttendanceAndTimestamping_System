@@ -11,9 +11,10 @@ bool nfcBegin();
 String nfcReadUid();
 
 // Result of reading a registration-encoded MIFARE Classic 1K card
-// (see docs/registration-mode-handoff.md — sectors 1+2's data blocks,
-// 4-6 and 8-10 (block 7/11 are each sector's trailer, not data), JSON
-// null-padded to 96 bytes). uid is set whenever a card was present,
+// (see docs/registration-mode-handoff.md — sectors 1-7's data blocks,
+// 4-6, 8-10, 12-14, 16-18, 20-22, 24-26, 28-30; trailers 7/11/15/19/
+// 23/27/31 are never data; JSON null-padded to 336 bytes). uid is set
+// whenever a card was present,
 // even if valid is false, so callers can still debounce/log by UID.
 struct CardData {
   String uid;
@@ -23,14 +24,15 @@ struct CardData {
   bool valid;  // false if auth/read failed or the JSON was malformed
 };
 
-// Like nfcReadUid(), but also authenticates sectors 1 and 2 with the
+// Like nfcReadUid(), but also authenticates sectors 1-7 with the
 // default key and reads/parses the student_info JSON from their data
 // blocks. Used in registration mode; nfcReadUid() stays the lighter
 // attendance-mode path since it doesn't need the auth round trip.
 CardData nfcReadData();
 
-// Writes student JSON to MIFARE Classic sectors 1-2 (blocks 4-6, 8-10)
-// using the factory default key. The JSON is null-padded to 96 bytes.
+// Writes student JSON to MIFARE Classic sectors 1-7 (blocks 4-6, 8-10,
+// 12-14, 16-18, 20-22, 24-26, 28-30) using the factory default key.
+// The JSON is null-padded to 336 bytes.
 // Returns true on success, false if auth or write failed.
 bool nfcWriteData(const String& schoolId, const String& firstName,
                   const String& lastName);

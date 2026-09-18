@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Encode student data onto a MIFARE Classic 1K card (sectors 1+2's data blocks).
+"""Encode student data onto a MIFARE Classic 1K card (sectors 1–7's data blocks).
 
 Usage (CLI):
     python encode_card.py --school-id 25-1809-52 \
@@ -22,13 +22,21 @@ from binascii import hexlify
 import nfc
 
 DEFAULT_KEY = b"\xff\xff\xff\xff\xff\xff"
-# Block 7 (sector 1) and block 11 (sector 2) are each sector's TRAILER
-# (Key A + access bits + Key B) on MIFARE Classic — never data, on any
+# Blocks 7/11/15/19/23/27/31 are each sector's TRAILER (Key A +
+# access bits + Key B) on MIFARE Classic — never data, on any
 # sector. Writing raw payload bytes into a trailer can corrupt the
 # access bits and permanently lock the sector, so this list is
-# deliberately just the 6 real data blocks across two sectors, grouped
-# by which sector each needs authenticating against.
-SECTOR_DATA_BLOCKS = {1: [4, 5, 6], 2: [8, 9, 10]}
+# deliberately just the 21 real data blocks across seven sectors,
+# grouped by which sector each needs authenticating against.
+SECTOR_DATA_BLOCKS = {
+    1: [4, 5, 6],
+    2: [8, 9, 10],
+    3: [12, 13, 14],
+    4: [16, 17, 18],
+    5: [20, 21, 22],
+    6: [24, 25, 26],
+    7: [28, 29, 30],
+}
 
 
 class CardEncodeError(Exception):
@@ -36,18 +44,18 @@ class CardEncodeError(Exception):
 
 
 def build_payload(data: dict) -> bytes:
-    """Render student fields as null-padded 96-byte JSON payload."""
+    """Render student fields as null-padded 336-byte JSON payload."""
     payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-    if len(payload) > 96:
+    if len(payload) > 336:
         raise ValueError(
-            f"Payload too large: {len(payload)} bytes (max 96). "
+            f"Payload too large: {len(payload)} bytes (max 336). "
             "Shorten school_id / first_name / last_name."
         )
-    return payload.ljust(96, b"\x00")
+    return payload.ljust(336, b"\x00")
 
 
 def encode(card, data: dict) -> dict:
-    """Write the payload to sectors 1+2 and return what was written."""
+    """Write the payload to sectors 1–7 and return what was written."""
     payload = build_payload(data)
 
     # NOTE: this authenticate()/write_block() call shape is carried

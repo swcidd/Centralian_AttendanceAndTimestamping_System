@@ -1,3 +1,5 @@
+import { CgClose } from "react-icons/cg";
+
 interface CourseCardProps {
   stubs: string[];
   name: string;
@@ -6,6 +8,7 @@ interface CourseCardProps {
   deviceMac: string | null;
   roomName: string | null;
   onAddStub: () => void;
+  onDeleteStub: (stub: string) => void;
   onAssign: () => void;
   onDelete: () => void;
 }
@@ -18,6 +21,7 @@ const CourseCard = ({
   deviceMac,
   roomName,
   onAddStub,
+  onDeleteStub,
   onAssign,
   onDelete,
 }: CourseCardProps) => {
@@ -29,9 +33,18 @@ const CourseCard = ({
           {stubs.map((stub) => (
             <span
               key={stub}
-              className="bg-orange/10 text-orange rounded-full px-2 py-0.5 font-mono text-xs font-medium"
+              className="bg-orange/10 text-orange inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs font-medium"
             >
               {stub}
+              <button
+                type="button"
+                onClick={() => onDeleteStub(stub)}
+                aria-label={`Delete stubcode ${stub}`}
+                title="Delete stubcode"
+                className="text-orange/60 transition hover:text-red-600"
+              >
+                <CgClose className="text-[10px]" />
+              </button>
             </span>
           ))}
           <button

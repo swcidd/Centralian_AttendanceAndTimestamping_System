@@ -54,9 +54,27 @@ Professor (Profiles)          Course                    Stubcode
   `ingest-tap` threshold lookup reads the course through the stub's FK
   (requires `supabase functions deploy ingest-tap`).
 
+## Deletion semantics (migration 0013)
+
+- **Stubcode delete**: each chip on the course card has an ✕. The page
+  counts the stub's attendance rows first and the confirmation spells
+  them out ("drop its N attendance records first"); the FK cascade
+  removes roster, sessions, commands, pending registrations, and
+  attendance before the stub row itself. A course must keep at least
+  one stubcode — the last one is refused with a pointer to delete the
+  course instead.
+- **Course delete**: same flow across all of the course's stubcodes —
+  confirmation names the record count, then everything beneath drops
+  before the course row.
+- `0013` changed `Attendance_Logs.Stub_Code` from NO ACTION (history
+  used to block deletion outright) to ON DELETE CASCADE. Direct client
+  deletes of attendance logs remain blocked by RLS — audit writes stay
+  edge-function-only; only parent deletion purges.
+
 ## Deploy order
 
-1. `supabase db push` (migration 0012)
-2. `supabase functions deploy ingest-tap`
-3. Deploy the frontend (Cloudflare) — between 1 and 3 the live site's
-   course queries fail, so keep the gap short.
+1. `supabase db push` (pending migrations — 0012, 0013)
+2. `supabase functions deploy ingest-tap` (only when ingest-tap code
+   changed, e.g. with 0012)
+3. Deploy the frontend (Cloudflare) — the live site must match the
+   schema, so keep the gap short.

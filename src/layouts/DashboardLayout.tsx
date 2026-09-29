@@ -42,7 +42,9 @@ const DashboardLayout = () => {
   return (
     <div className="flex min-h-screen bg-cream">
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
-      <div className="flex flex-1 flex-col">
+      {/* lg:ml-28 clears the persistent desktop rail (w-28); below lg
+          the sidebar is a slide-over drawer, so no offset is needed. */}
+      <div className="flex flex-1 flex-col lg:ml-28">
         <Topbar toggleSidebar={toggleSidebar} />
         <main className="flex-1 bg-cream">
           <Outlet />

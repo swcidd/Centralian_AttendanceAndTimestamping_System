@@ -2,12 +2,13 @@ import { supabase } from "../lib/supabase";
 import type { Course } from "../types/types";
 
 interface CourseRow {
-  stub_code: string;
+  course_id: string;
   course_name: string;
   start_time: string;
   end_time: string;
   days_of_week: string;
   device_mac: string | null;
+  stubcodes: Array<{ stub_code: string }> | null;
   devices: { room_name: string } | null;
   profiles: { first_name: string; last_name: string } | null;
 }
@@ -22,14 +23,17 @@ export async function fetchCourses(): Promise<Course[]> {
   const { data, error } = await supabase
     .from("courses")
     .select(
-      "stub_code, course_name, start_time, end_time, days_of_week, device_mac, devices(room_name), profiles(first_name, last_name)"
+      "course_id, course_name, start_time, end_time, days_of_week, device_mac, stubcodes(stub_code), devices(room_name), profiles(first_name, last_name)"
     )
     .returns<CourseRow[]>();
 
   if (error) throw error;
 
   return (data ?? []).map((course) => ({
-    stub: course.stub_code,
+    courseId: course.course_id,
+    stubs: (course.stubcodes ?? [])
+      .map((stub) => stub.stub_code)
+      .sort((a, b) => a.localeCompare(b)),
     name: course.course_name,
     schedule: `${course.days_of_week}, ${course.start_time} - ${course.end_time}`,
     instructor: course.profiles
@@ -81,7 +85,7 @@ export async function upsertDevice(deviceMac: string, roomName: string) {
 // existing course. Assigning keeps the `devices` registry in sync —
 // same upsert createCourse uses — then points the course at it.
 export async function assignDevice(
-  stubCode: string,
+  courseId: string,
   deviceMac: string | null,
   roomName: string | null
 ): Promise<void> {
@@ -96,9 +100,32 @@ export async function assignDevice(
   const { error } = await supabase
     .from("courses")
     .update({ device_mac: deviceMac })
-    .eq("stub_code", stubCode);
+    .eq("course_id", courseId);
 
   if (error) throw error;
+}
+
+const UNIQUE_VIOLATION = "23505";
+
+// Adds another stubcode to an existing course (Course 1:N Stubcode).
+// Stub codes are globally unique — they're the join key used by
+// enrollments, sessions, and attendance — so a duplicate is reported
+// as a human-readable error instead of a raw Postgres violation.
+export async function addStubcode(
+  courseId: string,
+  stubCode: string
+): Promise<void> {
+  const stub = stubCode.trim();
+  const { error } = await supabase
+    .from("stubcodes")
+    .insert({ stub_code: stub, course_id: courseId });
+
+  if (error) {
+    if (error.code === UNIQUE_VIOLATION) {
+      throw new Error(`Stub code "${stub}" is already in use.`);
+    }
+    throw error;
+  }
 }
 
 export async function createCourse(input: NewCourseInput) {
@@ -109,24 +136,40 @@ export async function createCourse(input: NewCourseInput) {
     await upsertDevice(input.deviceMac, input.roomName);
   }
 
-  const { error } = await supabase.from("courses").insert({
-    stub_code: input.stubCode,
-    subject_code: input.subjectCode,
-    course_name: input.courseName,
-    instructor_id: userData.user?.id,
-    device_mac: input.deviceMac,
-    start_time: input.startTime,
-    end_time: input.endTime,
-    days_of_week: input.daysOfWeek,
-  });
+  const { data: course, error } = await supabase
+    .from("courses")
+    .insert({
+      subject_code: input.subjectCode,
+      course_name: input.courseName,
+      instructor_id: userData.user?.id,
+      device_mac: input.deviceMac,
+      start_time: input.startTime,
+      end_time: input.endTime,
+      days_of_week: input.daysOfWeek,
+    })
+    .select("course_id")
+    .single();
 
   if (error) throw error;
+
+  // The form's stub code becomes the course's first stubcode. If that
+  // fails, remove the course again rather than leaving a course with
+  // no stubcodes behind.
+  try {
+    await addStubcode(course.course_id, input.stubCode);
+  } catch (stubError) {
+    await supabase.from("courses").delete().eq("course_id", course.course_id);
+    throw stubError;
+  }
 }
 
 const FOREIGN_KEY_VIOLATION = "23503";
 
-export async function deleteCourse(stubCode: string): Promise<void> {
-  const { error } = await supabase.from("courses").delete().eq("stub_code", stubCode);
+export async function deleteCourse(courseId: string): Promise<void> {
+  const { error } = await supabase
+    .from("courses")
+    .delete()
+    .eq("course_id", courseId);
 
   if (error) {
     if (error.code === FOREIGN_KEY_VIOLATION) {

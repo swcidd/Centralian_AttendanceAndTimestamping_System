@@ -1,28 +1,49 @@
 interface CourseCardProps {
-  stub: string;
+  stubs: string[];
   name: string;
   schedule: string;
   instructor: string;
   deviceMac: string | null;
   roomName: string | null;
+  onAddStub: () => void;
   onAssign: () => void;
   onDelete: () => void;
 }
 
 const CourseCard = ({
-  stub,
+  stubs,
   name,
   schedule,
   instructor,
   deviceMac,
   roomName,
+  onAddStub,
   onAssign,
   onDelete,
 }: CourseCardProps) => {
   return (
     <div className="border-tan transition rounded-xl border bg-white p-5 shadow-sm hover:-translate-y-1 hover:shadow-md">
-      <div className="flex items-center justify-between">
-        <p className="text-orange text-sm font-medium">Stub: {stub}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-orange text-sm font-medium">Stubs:</span>
+          {stubs.map((stub) => (
+            <span
+              key={stub}
+              className="bg-orange/10 text-orange rounded-full px-2 py-0.5 font-mono text-xs font-medium"
+            >
+              {stub}
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={onAddStub}
+            aria-label={`Add stubcode to ${name}`}
+            title="Add stubcode"
+            className="border-orange/40 text-orange hover:bg-orange/5 rounded-full border border-dashed px-2 py-0.5 text-xs font-medium transition"
+          >
+            +
+          </button>
+        </div>
         <button
           onClick={onDelete}
           aria-label={`Delete ${name}`}

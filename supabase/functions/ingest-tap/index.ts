@@ -154,10 +154,14 @@ Deno.serve(async (req) => {
     return await handleRegistration(supabase, session, payload);
   }
 
-  const [{ data: course }, { data: student }] = await Promise.all([
+  // Thresholds live on the course; stub codes live in stubcodes since
+  // migration 0012 (a course owns many stubcodes), so look the owning
+  // course up through the stub's FK rather than a courses.stub_code
+  // column that no longer exists.
+  const [{ data: stub }, { data: student }] = await Promise.all([
     supabase
-      .from("courses")
-      .select("late_after_minutes")
+      .from("stubcodes")
+      .select("courses(late_after_minutes)")
       .eq("stub_code", session.stub_code)
       .maybeSingle(),
     supabase
@@ -213,7 +217,7 @@ Deno.serve(async (req) => {
   }
 
   const tapTime = new Date(payload.timestamp * 1000);
-  const lateAfterMinutes = course?.late_after_minutes ?? null;
+  const lateAfterMinutes = stub?.courses?.late_after_minutes ?? null;
   const isLate =
     studentId != null &&
     lateAfterMinutes != null &&

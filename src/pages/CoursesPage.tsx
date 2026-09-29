@@ -8,6 +8,7 @@ import AssignTerminalModal from "../components/courses/AssignTerminalModal";
 import { deleteCourse, fetchCourses } from "../services/coursesApi";
 import { getErrorMessage } from "../lib/errors";
 import { matchesCourseSearch } from "../lib/utils/courseSearch";
+import AddStubcodeModal from "../components/courses/AddStubcodeModal";
 import type { Course } from "../types/types";
 
 const CoursesPage = () => {
@@ -15,6 +16,7 @@ const CoursesPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [assignCourse, setAssignCourse] = useState<Course | null>(null);
+  const [stubCourse, setStubCourse] = useState<Course | null>(null);
 
   const loadCourses = () => {
     fetchCourses()
@@ -26,22 +28,29 @@ const CoursesPage = () => {
 
   useEffect(loadCourses, []);
 
-  const handleDelete = async (stub: string) => {
-    if (!window.confirm(`Delete course ${stub}? This can't be undone.`)) {
+  const handleDelete = async (courseId: string) => {
+    const course = courses.find((c) => c.courseId === courseId);
+    const label = course ? course.name : "this course";
+    if (!window.confirm(`Delete course ${label}? This can't be undone.`)) {
       return;
     }
     setError(null);
     try {
-      await deleteCourse(stub);
+      await deleteCourse(courseId);
       loadCourses();
     } catch (err) {
       setError(getErrorMessage(err, "Failed to delete course."));
     }
   };
 
-  const handleAssign = (stub: string) => {
-    const course = courses.find((c) => c.stub === stub);
+  const handleAssign = (courseId: string) => {
+    const course = courses.find((c) => c.courseId === courseId);
     if (course) setAssignCourse(course);
+  };
+
+  const handleAddStub = (courseId: string) => {
+    const course = courses.find((c) => c.courseId === courseId);
+    if (course) setStubCourse(course);
   };
 
   const filteredCourses = courses.filter(matchesCourseSearch(searchTerm));
@@ -62,6 +71,7 @@ const CoursesPage = () => {
               )}
               <CourseGrid
                 courses={filteredCourses}
+                onAddStub={handleAddStub}
                 onAssign={handleAssign}
                 onDelete={handleDelete}
               />
@@ -78,6 +88,14 @@ const CoursesPage = () => {
           course={assignCourse}
           onClose={() => setAssignCourse(null)}
           onAssigned={loadCourses}
+        />
+      )}
+
+      {stubCourse && (
+        <AddStubcodeModal
+          course={stubCourse}
+          onClose={() => setStubCourse(null)}
+          onAdded={loadCourses}
         />
       )}
     </div>

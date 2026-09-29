@@ -45,6 +45,9 @@ const Sidebar = ({ isOpen, toggleSidebar }: SidebarProps) => {
           <NavLink to="/courses" className={linkStyle}>
             Courses
           </NavLink>
+          <NavLink to="/encode" className={linkStyle}>
+            Encode Card
+          </NavLink>
         </nav>
       </aside>
     </>

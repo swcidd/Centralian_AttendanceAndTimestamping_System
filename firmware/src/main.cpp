@@ -42,7 +42,7 @@ void printCardData(const CardData& card, unsigned long timestamp,
   } else {
     Serial.println(F("  Name        : (unknown card)"));
     Serial.println(F("  School ID   : -"));
-    Serial.println(F("  Card Data   : NO DATA — card has no JSON written to sectors 1-2"));
+    Serial.println(F("  Card Data   : NO DATA — card has no JSON written to sectors 1-7"));
     Serial.println(F("  Write JSON  : {\"school_id\":\"...\",\"first_name\":\"...\",\"last_name\":\"...\"}"));
   }
   Serial.printf("  Timestamp   : %lu\n", timestamp);
@@ -80,7 +80,14 @@ void setup() {
     Serial.println("PN532 not found");
   }
 
+  // Let the PN532's RF field and I2C bus settle before WiFi starts.
+  // Without this, the PN532's active RF field desensitizes the WiFi
+  // receiver (rssi -128, reason 201 NO_AP_FOUND) — the radio can't
+  // hear any AP at all during the connection handshake.
+  delay(500);
+
   WiFi.onEvent(onWiFiEvent);
+  WiFi.mode(WIFI_STA);  // explicit station mode before begin()
 
   // Full power for the connection handshake itself — nfcBegin() above
   // has already finished by now, so there's nothing left to protect

@@ -80,7 +80,14 @@ void setup() {
     Serial.println("PN532 not found");
   }
 
+  // Let the PN532's RF field and I2C bus settle before WiFi starts.
+  // Without this, the PN532's active RF field desensitizes the WiFi
+  // receiver (rssi -128, reason 201 NO_AP_FOUND) — the radio can't
+  // hear any AP at all during the connection handshake.
+  delay(500);
+
   WiFi.onEvent(onWiFiEvent);
+  WiFi.mode(WIFI_STA);  // explicit station mode before begin()
 
   // Full power for the connection handshake itself — nfcBegin() above
   // has already finished by now, so there's nothing left to protect

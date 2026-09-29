@@ -165,6 +165,39 @@ export async function createCourse(input: NewCourseInput) {
 
 const FOREIGN_KEY_VIOLATION = "23503";
 
+// How many attendance rows sit beneath these stubcodes. Shown in the
+// deletion confirmation so the operator sees exactly what will be
+// dropped before the delete runs (RLS lets any instructor read logs;
+// deletion itself happens through FK cascades, not a client DELETE).
+export async function countAttendance(stubCodes: string[]): Promise<number> {
+  if (stubCodes.length === 0) return 0;
+
+  const { count, error } = await supabase
+    .from("attendance_logs")
+    .select("log_id", { count: "exact", head: true })
+    .in("stub_code", stubCodes);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// Deletes one stubcode from a course. Everything keyed beneath it —
+// roster, sessions, device commands, pending registrations, and
+// attendance — goes with it via the FK cascades set up by migrations
+// 0012/0013; the UI confirms the record count first and the course
+// must keep at least one stubcode (enforced in the page).
+export async function deleteStubcode(stubCode: string): Promise<void> {
+  const { error } = await supabase
+    .from("stubcodes")
+    .delete()
+    .eq("stub_code", stubCode);
+
+  if (error) throw error;
+}
+
+// Deletes a course; its stubcodes and everything beneath them cascade
+// (migration 0013 dropped the history-blocking FK). The 23503 branch
+// is a safety net — after 0013 nothing is expected to block.
 export async function deleteCourse(courseId: string): Promise<void> {
   const { error } = await supabase
     .from("courses")
@@ -174,7 +207,7 @@ export async function deleteCourse(courseId: string): Promise<void> {
   if (error) {
     if (error.code === FOREIGN_KEY_VIOLATION) {
       throw new Error(
-        "This course has attendance records and can't be deleted."
+        "This course can't be deleted while records still reference it."
       );
     }
     throw error;

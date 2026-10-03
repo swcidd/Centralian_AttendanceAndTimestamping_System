@@ -5,10 +5,10 @@ import TrackingTable from "../components/tracking/TrackingTable";
 import TrackingButton from "../components/tracking/TrackingButton";
 
 import { getActiveSession, type ActiveSession } from "../services/sessionsApi";
-import { DB_STATUS_TO_UI, fetchSessionRoster } from "../services/attendanceApi";
+import { fetchSessionRoster } from "../services/attendanceApi";
 import { useRealtimeAttendance } from "../hooks/useRealtimeAttendance";
 import { supabase } from "../lib/supabase";
-import { attendanceReducer, type RosterState } from "../lib/utils/attendanceReducer";
+import { foldLiveTaps } from "../lib/utils/rosterPipeline";
 
 import type { Course, StudentStatus } from "../types/types";
 
@@ -99,22 +99,12 @@ const TrackingPage = () => {
   }, [selectedStub, activeSession?.status, loadRoster]);
 
   // Live taps stream in via realtime; fold them onto the base roster
-  // through the pure reducer rather than re-fetching per tap. Folding
-  // the whole array (not just the newest entry) keeps this correct even
-  // when several taps land in the same render batch.
+  // through the pure tap pipeline rather than re-fetching per tap.
   const taps = useRealtimeAttendance(sessionId);
-  const students = useMemo(() => {
-    let state: RosterState = { students: baseRoster };
-    for (const tap of taps) {
-      if (!tap.student_id) continue;
-      state = attendanceReducer(state, {
-        studentId: tap.student_id,
-        timestamp: tap.timestamp,
-        status: DB_STATUS_TO_UI[tap.status as "PRESENT" | "LATE" | "ABSENT"],
-      });
-    }
-    return state.students as StudentStatus[];
-  }, [baseRoster, taps]);
+  const students = useMemo(
+    () => foldLiveTaps(baseRoster, taps) as StudentStatus[],
+    [baseRoster, taps]
+  );
 
   const needsCalibration =
     selectedStub !== null && !activeSession && baseRoster.length === 0;

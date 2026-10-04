@@ -5,14 +5,20 @@
 #include <Wire.h>
 
 namespace {
-// Sector 1 (blocks 4-6) + sector 2 (blocks 8-10): 6 real data blocks,
-// 96 bytes. Block 7 and block 11 are each sector's TRAILER (Key A +
-// access bits + Key B) on MIFARE Classic — never data, on every
-// sector, not something specific to this card. A single sector's 3
-// usable blocks (48 bytes) isn't enough for realistic name lengths;
-// the registration JSON payload for the doc's own example name runs
-// 79 bytes with ordinary encoding.
-const uint8_t REGISTRATION_DATA_BLOCKS[6] = {4, 5, 6, 8, 9, 10};
+// Sectors 1-7 (blocks 4-6, 8-10, 12-14, 16-18, 20-22, 24-26, 28-30):
+// 21 real data blocks, 336 bytes. Blocks 7/11/15/19/23/27/31 are each
+// sector's TRAILER (Key A + access bits + Key B) on MIFARE Classic —
+// never data, on every sector. Seven sectors comfortably fits any
+// realistic name length with room to spare.
+const uint8_t REGISTRATION_DATA_BLOCKS[21] = {
+  4, 5, 6,      // sector 1
+  8, 9, 10,     // sector 2
+  12, 13, 14,   // sector 3
+  16, 17, 18,   // sector 4
+  20, 21, 22,   // sector 5
+  24, 25, 26,   // sector 6
+  28, 29, 30    // sector 7
+};
 uint8_t defaultMifareKey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 }  // namespace
 
@@ -85,8 +91,8 @@ CardData nfcReadData() {
   uint8_t *workingKey = nullptr;
   uint8_t  workingKeyNum = 0;  // 0 = Key A
 
-  uint8_t payload[96];
-  for (uint8_t i = 0; i < 6; i++) {
+  uint8_t payload[336];
+  for (uint8_t i = 0; i < 21; i++) {
     uint8_t block = REGISTRATION_DATA_BLOCKS[i];
 
     if (i == 0) {
@@ -125,9 +131,9 @@ CardData nfcReadData() {
       return CardData{hex, "", "", "", false};
     }
   }
-  Serial.println("[nfcReadData] All 6 blocks read OK");
+  Serial.println("[nfcReadData] All 21 blocks read OK");
 
-  // JSON is null-padded to fill the 96-byte payload; trim at the first NUL.
+  // JSON is null-padded to fill the 336-byte payload; trim at the first NUL.
   size_t len = 0;
   while (len < sizeof(payload) && payload[len] != 0) len++;
 
@@ -241,21 +247,21 @@ bool nfcWriteData(const String& schoolId, const String& firstName,
   String json;
   serializeJson(doc, json);
 
-  if (json.length() > 96) {
-    Serial.printf("[nfcWriteData] JSON too large: %d bytes (max 96)\n", json.length());
+  if (json.length() > 336) {
+    Serial.printf("[nfcWriteData] JSON too large: %d bytes (max 336)\n", json.length());
     return false;
   }
   Serial.printf("[nfcWriteData] JSON: %s (%d bytes)\n", json.c_str(), json.length());
 
-  // Pad to 96 bytes with nulls
-  uint8_t payload[96];
+  // Pad to 336 bytes with nulls
+  uint8_t payload[336];
   memset(payload, 0, sizeof(payload));
   memcpy(payload, json.c_str(), json.length());
 
-  // Authenticate and write all 6 data blocks, with I2C re-init on failure.
+  // Authenticate and write all 21 data blocks, with I2C re-init on failure.
   // WiFi TX bursts can corrupt the I2C bus mid-transaction — re-init Wire
   // and retry up to 3 times per block before giving up.
-  for (uint8_t i = 0; i < 6; i++) {
+  for (uint8_t i = 0; i < 21; i++) {
     uint8_t block = REGISTRATION_DATA_BLOCKS[i];
     bool blockDone = false;
     for (uint8_t attempt = 0; attempt < 3 && !blockDone; attempt++) {
@@ -287,6 +293,6 @@ bool nfcWriteData(const String& schoolId, const String& firstName,
     }
   }
 
-  Serial.printf("[nfcWriteData] Success — %d bytes written to sectors 1-2\n", json.length());
+  Serial.printf("[nfcWriteData] Success — %d bytes written to sectors 1-7\n", json.length());
   return true;
 }

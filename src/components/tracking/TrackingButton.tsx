@@ -12,12 +12,15 @@ import type { Course } from "../../types/types";
 
 interface TrackingButtonProps {
   course: Course | null;
+  /** The stubcode whose session is being started/stopped. */
+  stub: string | null;
   activeSession: ActiveSession | null;
   onSessionChange: (session: ActiveSession | null) => void;
 }
 
 const TrackingButton = ({
   course,
+  stub,
   activeSession,
   onSessionChange,
 }: TrackingButtonProps) => {
@@ -26,7 +29,7 @@ const TrackingButton = ({
   const [mode, setMode] = useState<SessionMode>("ACTIVE_ATTENDANCE");
 
   const handleClick = async () => {
-    if (!course) return;
+    if (!course || !stub) return;
     setError(null);
     setIsBusy(true);
 
@@ -39,8 +42,8 @@ const TrackingButton = ({
           setError("This course has no terminal assigned yet.");
           return;
         }
-        await startSession(course.stub, course.deviceMac, mode);
-        const session = await getActiveSession(course.stub);
+        await startSession(stub, course.deviceMac, mode);
+        const session = await getActiveSession(stub);
         onSessionChange(session);
       }
     } catch (err) {
@@ -72,7 +75,7 @@ const TrackingButton = ({
         )}
         <button
           onClick={handleClick}
-          disabled={!course || isBusy}
+          disabled={!course || !stub || isBusy}
           className="bg-orange rounded-lg px-5 py-2.5 font-medium text-white shadow-sm transition hover:brightness-95 active:scale-90 disabled:opacity-60"
         >
           {activeSession ? "Stop" : "Start"}

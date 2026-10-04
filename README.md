@@ -115,7 +115,7 @@ cp firmware/include/config.h.example firmware/include/config.h
 
 ## Card Encoding
 
-Student cards are provisioned **before** they're ever tapped on a terminal, using `tools/encode_card.py` on a desktop with a USB NFC reader (ACR122U or PN532). It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1 & 2 (blocks 4–6, 8–10) with the factory-default key.
+Student cards are provisioned **before** they're ever tapped on a terminal, using `tools/encode_card.py` on a desktop with a USB NFC reader (ACR122U or PN532). It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1–7 (blocks 4–30, excluding trailers) with the factory-default key — 336 bytes total.
 
 See **[`docs/card-encoding.md`](docs/card-encoding.md)** for the full layout, hardware requirements, and single/bulk encoding instructions.
 

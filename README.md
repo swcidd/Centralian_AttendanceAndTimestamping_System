@@ -111,6 +111,8 @@ cp firmware/include/config.h.example firmware/include/config.h
 | `nfc-test` | `nfc_test_main.cpp` | NFC/UID read-only test |
 | `i2c-scan` | `i2c_scan_main.cpp` | Scan the I2C bus for the PN532 |
 
+> **NFC not responding?** Wiring plus a line-by-line guide to the `i2c-scan` / `nfc-test` output live in [`docs/nfc-troubleshooting.md`](docs/nfc-troubleshooting.md).
+
 > **config.h is gitignored** — each developer/device keeps a private copy. Only `config.h.example` is committed.
 
 ## Card Encoding

@@ -1,6 +1,60 @@
 @import "tailwindcss";
 
+/* Self-hosted fonts — Outfit as the primary face, Inter as the
+   fallback for glyphs/locales Outfit doesn't cover. Both declared
+   with font-display: swap so text paints immediately in the
+   fallback while the webfont loads. */
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/outfit-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Outfit";
+  /* Covers weight 500 (font-medium) too — the set is static
+     400/600/700, and letting 500 fall through to the 400 file
+     would flatten medium text into regular weight. */
+  src: url("/fonts/outfit-600.woff2") format("woff2");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Outfit";
+  src: url("/fonts/outfit-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-600.woff2") format("woff2");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
+  /* Outfit first, Inter second — everything inheriting the default
+     font stack (body, headings, form controls) gets Outfit. */
+  --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+
   --color-orange: #e76f1d;
   --color-navy: #2b355a;
   --color-cream: #f4efe6;
@@ -112,7 +166,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: #f4efe6;
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Entrance animation for page load */

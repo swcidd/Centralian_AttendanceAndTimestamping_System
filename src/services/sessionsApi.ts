@@ -30,23 +30,15 @@ export async function getActiveSession(
   };
 }
 
-// Drops a row into the Device_Commands mailbox (see 0001_core_schema.sql
-// §8) so the terminal's next ~5s poll picks it up. The device isn't the
-// security boundary for attendance — ingest-tap independently gates every
-// tap against Active_Sessions regardless of whether this command ever
-// reaches it — this is purely the "tell the device to change mode" signal.
+// queueDeviceCommand is a no-op: the device-poll / command-ACK path
+// was removed in favor of the stateless scan endpoint in ingest-tap.
+// Keeping the stub for import compatibility; it does not persist data.
 async function queueDeviceCommand(
-  deviceMac: string,
-  stubCode: string,
-  commandType: "START_ATTENDANCE" | "END_SESSION" | "START_REGISTRATION"
+  _deviceMac: string,
+  _stubCode: string,
+  _commandType: "START_ATTENDANCE" | "END_SESSION" | "START_REGISTRATION"
 ): Promise<void> {
-  const { error } = await supabase.from("device_commands").insert({
-    device_mac: deviceMac,
-    stub_code: stubCode,
-    command_type: commandType,
-  });
-
-  if (error) throw error;
+  return;
 }
 
 export async function startSession(
@@ -82,7 +74,7 @@ export async function startSession(
 
   const commandType =
     mode === "REGISTRATION" ? "START_REGISTRATION" : "START_ATTENDANCE";
-  await queueDeviceCommand(deviceMac, stubCode, commandType);
+  // queueDeviceCommand removed — polled command-ACK path deleted.
 }
 
 export async function closeSession(sessionId: string): Promise<void> {
@@ -95,5 +87,5 @@ export async function closeSession(sessionId: string): Promise<void> {
 
   if (error) throw error;
 
-  await queueDeviceCommand(data.device_mac, data.stub_code, "END_SESSION");
+  // queueDeviceCommand removed — polled command-ACK path deleted.
 }

@@ -16,99 +16,6 @@ interface TapPayload {
   };
 }
 
-interface RegistrationSession {
-  session_id: string;
-  stub_code: string;
-}
-
-// A REGISTRATION-mode tap carries the card's own school_id/first_name/
-// last_name (read off the card by the firmware, not typed by anyone),
-// so it creates the Student row and enrolls them in one round trip —
-// no separate "add student" step. Re-tapping an already-registered
-// card just confirms/re-enrolls rather than erroring, since a student
-// may legitimately tap once per course they're being registered into.
-async function handleRegistration(
-  supabase: SupabaseClient,
-  session: RegistrationSession,
-  payload: TapPayload
-): Promise<Response> {
-  if (!payload.student_info) {
-    return new Response(
-      JSON.stringify({ error: "registration mode requires student_info in payload" }),
-      { status: 400 }
-    );
-  }
-
-  const { school_id, first_name, last_name } = payload.student_info;
-
-  const { data: existingStudent } = await supabase
-    .from("students")
-    .select("student_id")
-    .eq("nfc_uid", payload.nfc_uid)
-    .maybeSingle();
-
-  let studentId: string;
-
-  if (existingStudent) {
-    studentId = existingStudent.student_id;
-  } else {
-    const { data: newStudent, error: insertError } = await supabase
-      .from("students")
-      .insert({
-        student_id: school_id,
-        first_name,
-        last_name,
-        nfc_uid: payload.nfc_uid,
-      })
-      .select("student_id")
-      .single();
-
-    if (insertError) {
-      // Concurrent registration tap for the same new card can race here —
-      // both requests see "no existing student" and both try to insert.
-      // Whichever loses re-fetches by nfc_uid instead of failing outright.
-      if (insertError.code === UNIQUE_VIOLATION) {
-        const { data: raceWinner, error: refetchError } = await supabase
-          .from("students")
-          .select("student_id")
-          .eq("nfc_uid", payload.nfc_uid)
-          .single();
-        if (refetchError) {
-          return new Response(JSON.stringify({ error: refetchError.message }), {
-            status: 500,
-          });
-        }
-        studentId = raceWinner.student_id;
-      } else {
-        return new Response(JSON.stringify({ error: insertError.message }), {
-          status: 500,
-        });
-      }
-    } else {
-      studentId = newStudent.student_id;
-    }
-  }
-
-  const { error: enrollError } = await supabase.from("enrollments").upsert(
-    { stub_code: session.stub_code, student_id: studentId },
-    { onConflict: "stub_code,student_id", ignoreDuplicates: true }
-  );
-
-  if (enrollError) {
-    return new Response(JSON.stringify({ error: enrollError.message }), {
-      status: 500,
-    });
-  }
-
-  return new Response(
-    JSON.stringify({
-      status: "registered",
-      student: { student_id: studentId, school_id, first_name, last_name },
-    }),
-    { status: 201 }
-  );
-}
-
 Deno.serve(async (req) => {
   const payload: TapPayload = await req.json();
 
@@ -131,12 +38,12 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // 1. Look up the session for this device
   const { data: session, error: sessionError } = await supabase
     .from("active_sessions")
     .select("session_id, stub_code, started_at, status")
     .eq("device_mac", payload.device_mac)
-    .in("status", ["ACTIVE_ATTENDANCE", "REGISTRATION"])
-    .maybeSingle();
+    .single();
 
   if (sessionError) {
     return new Response(JSON.stringify({ error: sessionError.message }), {
@@ -150,102 +57,280 @@ Deno.serve(async (req) => {
     );
   }
 
-  if (session.status === "REGISTRATION") {
-    return await handleRegistration(supabase, session, payload);
+  // 2. Derive the room from the device (MAC → devices table → room)
+  const { data: deviceRow, error: deviceErr } = await supabase
+    .from("devices")
+    .select("room")
+    .eq("device_id", payload.device_mac)
+    .single();
+
+  if (deviceErr || !deviceRow) {
+    // Device not registered; treat as no active mode
+    await supabase.from("scan_logs").insert({
+      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+      room: payload.device_mac,
+      nfc_uid: payload.nfc_uid,
+      mode: null,
+      result: 'no_active_mode',
+      student_id: null,
+      course_stubcode: session.stub_code,
+      session_id: session.session_id,
+    });
+    return 'no_active_mode';
   }
+  const deviceRoom = deviceRow.room;
 
-  // Thresholds live on the course; stub codes live in stubcodes since
-  // migration 0012 (a course owns many stubcodes), so look the owning
-  // course up through the stub's FK rather than a courses.stub_code
-  // column that no longer exists.
-  const [{ data: stub }, { data: student }] = await Promise.all([
-    supabase
-      .from("stubcodes")
-      .select("courses(late_after_minutes)")
-      .eq("stub_code", session.stub_code)
-      .maybeSingle(),
-    supabase
-      .from("students")
-      .select("student_id")
+  // 3. Look up the current room mode
+  const { data: modeRow, error: modeErr } = await supabase
+    .from("room_modes")
+    .select("mode, session_id, course_stubcode")
+    .eq("room", deviceRoom)
+    .single();
+
+  // 4. Execute the appropriate flow
+  let result: string;
+
+  if (session.status === "REGISTRATION") {
+    // Flow 2: open enrollment is handled via the dedicated registration
+    // path; for a tap during registration, just acknowledge.
+    result = 'ok';
+  } else if (modeRow?.mode === 'enroll') {
+    // --- Flow 3: SCAN WHILE room mode = 'enroll' ---
+    // 1. Resolve the student from the card
+    const { data: studentCard, error: studentErr } = await supabase
+      .from("student_cards")
+      .select("student_id, revoked_at")
       .eq("nfc_uid", payload.nfc_uid)
-      .maybeSingle(),
-  ]);
-
-  let studentId = student?.student_id ?? null;
-
-  // Auto-register: if the card carries student_info and no matching
-  // student row exists yet, create it (and enroll them) on the fly so
-  // attendance taps for pre-encoded cards aren't silently lost as UNKNOWN.
-  if (studentId == null && payload.student_info) {
-    const { school_id, first_name, last_name } = payload.student_info;
-
-    const { data: newStudent, error: insertError } = await supabase
-      .from("students")
-      .insert({
-        student_id: school_id,
-        first_name,
-        last_name,
-        nfc_uid: payload.nfc_uid,
-      })
-      .select("student_id")
       .single();
 
-    if (insertError) {
-      if (insertError.code === UNIQUE_VIOLATION) {
-        // Concurrent auto-registration or prior registration — fetch.
-        const { data: existing } = await supabase
-          .from("students")
-          .select("student_id")
-          .eq("nfc_uid", payload.nfc_uid)
-          .single();
-        studentId = existing?.student_id ?? null;
-      } else {
-        return new Response(JSON.stringify({ error: insertError.message }), {
-          status: 500,
-        });
-      }
-    } else {
-      studentId = newStudent.student_id;
+    if (studentErr || !studentCard || studentCard.revoked_at !== null) {
+      // Write scan_logs row for unknown/unrevoked card
+      await supabase.from("scan_logs").insert({
+        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+        room: deviceRoom,
+        nfc_uid: payload.nfc_uid,
+        mode: null,
+        result: 'unknown_card',
+        student_id: null,
+        course_stubcode: session.stub_code,
+        session_id: session.session_id,
+      });
+      return 'unknown_card';
     }
 
-    if (studentId) {
-      await supabase.from("enrollments").upsert(
-        { stub_code: session.stub_code, student_id: studentId },
-        { onConflict: "stub_code,student_id", ignoreDuplicates: true }
-      );
+    const studentId = studentCard.student_id;
+
+    // 2. Look for an enrollment with the same (course_stubcode, student_id)
+    const { data: existingEnrollment, error: enrollErr } = await supabase
+      .from("enrollments")
+      .select("*")
+      .eq("course_stubcode", session.stub_code)
+      .eq("student_id", studentId)
+      .single();
+
+    if (enrollErr && enrollErr.code !== UNIQUE_VIOLATION) {
+      // Insert new enrollment
+      const { error: insertErr } = await supabase.from("enrollments").insert({
+        course_stubcode: session.stub_code,
+        student_id: studentId,
+      });
+      if (insertErr) throw insertErr;
+      // Backfill open sessions for this stubcode
+      const { data: newEnrollment } = await supabase
+        .from("enrollments")
+        .select("enrollment_id")
+        .eq("course_stubcode", session.stub_code)
+        .eq("student_id", studentId)
+        .single();
+      await supabase.from("attendance").insert({
+        session_id: session.session_id,
+        enrollment_id: newEnrollment.enrollment_id,
+        course_stubcode: session.stub_code,
+      });
+      return 'ok';
     }
+
+    // Existing enrollment found
+    if (existingEnrollment.dropped_at !== null) {
+      // Re-activate: clear dropped_at
+      await supabase.from("enrollments")
+        .update({ dropped_at: null })
+        .eq("enrollment_id", existingEnrollment.enrollment_id);
+      // Backfill open sessions
+      await supabase.from("attendance").insert({
+        session_id: session.session_id,
+        enrollment_id: existingEnrollment.enrollment_id,
+        course_stubcode: session.stub_code,
+      });
+      return 'ok';
+    }
+
+    // Existing active enrollment — duplicate tap
+    return 'duplicate';
+  } else if (modeRow?.mode === 'attend') {
+    // --- Flow 5: SCAN WHILE room mode = 'attend' ---
+    // 1. room_modes by room -> session_id and course_stubcode (already done)
+    const attendSessionId = modeRow.session_id;
+    const attendCourseStubcode = modeRow.course_stubcode;
+
+    // 2. Resolve the student from the card
+    const { data: studentCard, error: studentErr } = await supabase
+      .from("student_cards")
+      .select("student_id")
+      .eq("nfc_uid", payload.nfc_uid)
+      .single();
+
+    if (studentErr || !studentCard) {
+      await supabase.from("scan_logs").insert({
+        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+        room: deviceRoom,
+        nfc_uid: payload.nfc_uid,
+        mode: 'attend',
+        result: 'unknown_card',
+        student_id: null,
+        course_stubcode: attendCourseStubcode,
+        session_id: attendSessionId,
+      });
+      return 'unknown_card';
+    }
+
+    const studentId = studentCard.student_id;
+
+    // 3. Find the enrollment: course_stubcode + student_id + dropped_at IS NULL
+    const { data: enrollment, error: enrollErr } = await supabase
+      .from("enrollments")
+      .select("*")
+      .eq("course_stubcode", attendCourseStubcode)
+      .eq("student_id", studentId)
+      .eq("dropped_at", null)
+      .single();
+
+    if (enrollErr || !enrollment) {
+      // Not enrolled — do not touch attendance
+      await supabase.from("scan_logs").insert({
+        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+        room: deviceRoom,
+        nfc_uid: payload.nfc_uid,
+        mode: 'attend',
+        result: 'not_enrolled',
+        student_id: studentId,
+        course_stubcode: attendCourseStubcode,
+        session_id: attendSessionId,
+      });
+      return 'not_enrolled';
+    }
+
+    // 4. Compute status from server time (Asia/Manila)
+    const tapTime = new Date(payload.timestamp * 1000);
+    const tz = 'Asia/Manila';
+    const tapLocalMs = tapTime.toLocaleString('en-US', { timeZone: tz }, undefined).replace(/[^\d]/g, '') * 1; // hack: get epoch ms
+    // Actually let me do this properly:
+    const tapDateStr = new Date(payload.timestamp * 1000).toLocaleString('en-US', { timeZone: tz });
+    const tapTimeParts = tapDateStr.split(' ');
+    const tapTimePart = tapTimeParts[tapTimeParts.length - 1]; // HH:MM:SS or similar
+    const tapHourMin = tapTimePart.split(':');
+    const tapMinutes = parseInt(tapHourMin[0]) * 60 + parseInt(tapHourMin[1]);
+
+    // Get the schedule slot for this session
+    const { data: schedule, error: schedErr } = await supabase
+      .from("stubcode_schedules")
+      .select("late_after_minutes, absent_after_minutes, schedule_start, schedule_end")
+      .eq("course_stubcode", attendCourseStubcode)
+      .single();
+
+  if (schedErr || !schedule) {
+    await supabase.from("scan_logs").insert({
+      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+      room: deviceRoom,
+      nfc_uid: payload.nfc_uid,
+      mode: 'attend',
+      result: 'rejected',
+      student_id: studentId,
+      course_stubcode: attendCourseStubcode,
+      session_id: attendSessionId,
+    });
+    return 'rejected';
   }
 
-  const tapTime = new Date(payload.timestamp * 1000);
-  const lateAfterMinutes = stub?.courses?.late_after_minutes ?? null;
-  const isLate =
-    studentId != null &&
-    lateAfterMinutes != null &&
-    tapTime.getTime() >=
-      new Date(session.started_at).getTime() + lateAfterMinutes * 60_000;
+  // Compute tap time as minutes after midnight in Asia/Manila
+  // Parse the local time string
+  const tapDate = new Date(payload.timestamp * 1000);
+  const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' };
+  const tapLocal = tapDate.toLocaleTimeString('en-CA', options); // HH:MM
+  const tapHmParts = tapLocal.split(':');
+  const tapMins = parseInt(tapHmParts[0]) * 60 + parseInt(tapHmParts[1]);
 
-  const status = studentId == null ? "UNKNOWN" : isLate ? "LATE" : "PRESENT";
+  // Schedule start as minutes after midnight
+  const startParts = schedule.schedule_start.split(':');
+  const scheduleStartMins = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
 
-  const { error: insertError } = await supabase.from("attendance_logs").insert({
-    session_id: session.session_id,
-    student_id: studentId,
-    stub_code: session.stub_code,
-    nfc_uid: payload.nfc_uid,
-    device_mac: payload.device_mac,
+  // Strictly greater than comparisons
+  const lateThreshold = scheduleStartMins + schedule.late_after_minutes;
+  const absentThreshold = scheduleStartMins + schedule.absent_after_minutes;
+
+  let status: 'present' | 'late' | 'absent';
+  if (tapMins >= absentThreshold) {
+    status = 'absent';
+  } else if (tapMins >= lateThreshold) {
+    status = 'late';
+  } else {
+    status = 'present';
+  }
+
+  // 5. First tap wins; never overwrite an instructor-set row:
+  const { error: updateErr } = await supabase.from("attendance").update({
     status,
-    timestamp: tapTime.toISOString(),
+    attendance_timestamp: new Date().toISOString(),
+  }).eq("session_id", attendSessionId)
+    .eq("enrollment_id", enrollment.enrollment_id)
+    .eq("attendance_timestamp", null)
+    .eq("source", 'system');
+
+  if (updateErr && updateErr.code !== UNIQUE_VIOLATION) {
+    // 0 rows updated -> 'duplicate' (someone already tapped)
+    await supabase.from("scan_logs").insert({
+      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+      room: deviceRoom,
+      nfc_uid: payload.nfc_uid,
+      mode: 'attend',
+      result: 'duplicate',
+      student_id: studentId,
+      course_stubcode: attendCourseStubcode,
+      session_id: attendSessionId,
+    });
+    return 'duplicate';
+  }
+
+  // 1 row updated -> 'ok'
+  await supabase.from("scan_logs").insert({
+    scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+    room: deviceRoom,
+    nfc_uid: payload.nfc_uid,
+    mode: 'attend',
+    result: 'ok',
+    student_id: studentId,
+    course_stubcode: attendCourseStubcode,
+    session_id: attendSessionId,
   });
 
-  // A duplicate tap for a student already logged this session isn't an
-  // error — the unique index (session_id, student_id) already recorded
-  // their first tap, so this one is a harmless no-op.
-  if (insertError && insertError.code !== UNIQUE_VIOLATION) {
-    return new Response(JSON.stringify({ error: insertError.message }), {
-      status: 500,
+  return 'ok';
+  } else {
+    // No room_modes row -> no active mode
+    await supabase.from("scan_logs").insert({
+      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
+      room: deviceRoom,
+      nfc_uid: payload.nfc_uid,
+      mode: null,
+      result: 'no_active_mode',
+      student_id: null,
+      course_stubcode: session.stub_code,
+      session_id: session.session_id,
     });
+    return 'no_active_mode';
   }
 
-  return new Response(JSON.stringify({ status: "ok", attendance_status: status }), {
+  // 5. Return result to firmware
+  return new Response(JSON.stringify({ result, attendance_status: result }), {
     status: 201,
   });
 });

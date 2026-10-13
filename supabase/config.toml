@@ -6,5 +6,3 @@
 [functions.ingest-tap]
 verify_jwt = false
 
-[functions.poll-commands]
-verify_jwt = false

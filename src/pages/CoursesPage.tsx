@@ -1,32 +1,26 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import CourseToolbar from "../components/courses/CourseToolbar";
 import CourseGrid from "../components/courses/CourseGrid";
 import StudentTrackTable from "../components/courses/StudentTrackTable";
-import AssignTerminalModal from "../components/courses/AssignTerminalModal";
 
 import {
   countAttendance,
   deleteCourse,
-  deleteStubcode,
   fetchCourses,
 } from "../services/coursesApi";
 import { getErrorMessage } from "../lib/errors";
 import { matchesCourseSearch } from "../lib/utils/courseSearch";
-import {
-  courseDeleteConfirm,
-  stubDeleteConfirm,
-} from "../lib/utils/deleteConfirm";
-import AddStubcodeModal from "../components/courses/AddStubcodeModal";
-import { sectionLabel } from "../lib/utils/section";
-import type { Course, CourseSection } from "../types/types";
+import { courseDeleteConfirm } from "../lib/utils/deleteConfirm";
+import type { Course } from "../types/types";
 
 const CoursesPage = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [assignCourse, setAssignCourse] = useState<Course | null>(null);
-  const [stubCourse, setStubCourse] = useState<Course | null>(null);
+
 
   const loadCourses = () => {
     fetchCourses()
@@ -68,55 +62,6 @@ const CoursesPage = () => {
     }
   };
 
-  const handleDeleteStub = async (section: CourseSection) => {
-    const course = courses.find((c) =>
-      c.sections.some(
-        (s) => s.code === section.code && s.type === section.type
-      )
-    );
-    if (!course) return;
-
-    // A course is its sections; deleting the last one leaves an empty
-    // shell, so steer the operator to delete the course instead.
-    if (course.sections.length === 1) {
-      setError(
-        `"${course.name}" needs at least one section — delete the course instead.`
-      );
-      return;
-    }
-    setError(null);
-
-    let attendance: number;
-    try {
-      attendance = await countAttendance([section]);
-    } catch (err) {
-      setError(
-        getErrorMessage(err, "Failed to check this stubcode's attendance records.")
-      );
-      return;
-    }
-
-    if (!window.confirm(stubDeleteConfirm(sectionLabel(section), attendance))) {
-      return;
-    }
-    try {
-      await deleteStubcode(section);
-      loadCourses();
-    } catch (err) {
-      setError(getErrorMessage(err, "Failed to delete stubcode."));
-    }
-  };
-
-  const handleAssign = (courseId: string) => {
-    const course = courses.find((c) => c.courseId === courseId);
-    if (course) setAssignCourse(course);
-  };
-
-  const handleAddStub = (courseId: string) => {
-    const course = courses.find((c) => c.courseId === courseId);
-    if (course) setStubCourse(course);
-  };
-
   const filteredCourses = courses.filter(matchesCourseSearch(searchTerm));
 
   return (
@@ -135,9 +80,7 @@ const CoursesPage = () => {
               )}
               <CourseGrid
                 courses={filteredCourses}
-                onAddStub={handleAddStub}
-                onDeleteStub={handleDeleteStub}
-                onAssign={handleAssign}
+                onOpenCourse={(courseId) => navigate(`/courses/${courseId}`)}
                 onDelete={handleDelete}
               />
             </div>
@@ -148,21 +91,6 @@ const CoursesPage = () => {
         </section>
       </div>
 
-      {assignCourse && (
-        <AssignTerminalModal
-          course={assignCourse}
-          onClose={() => setAssignCourse(null)}
-          onAssigned={loadCourses}
-        />
-      )}
-
-      {stubCourse && (
-        <AddStubcodeModal
-          course={stubCourse}
-          onClose={() => setStubCourse(null)}
-          onAdded={loadCourses}
-        />
-      )}
     </div>
   );
 };

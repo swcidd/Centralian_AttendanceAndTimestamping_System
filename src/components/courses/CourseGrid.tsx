@@ -1,21 +1,13 @@
-import type { Course, CourseSection } from "../../types/types";
+import type { Course } from "../../types/types";
 import CourseCard from "./CourseCard";
 
 interface CourseGridProps {
   courses: Course[];
-  onAddStub: (courseId: string) => void;
-  onDeleteStub: (section: CourseSection) => void;
-  onAssign: (courseId: string) => void;
+  onOpenCourse: (courseId: string) => void;
   onDelete: (courseId: string) => void;
 }
 
-const CourseGrid = ({
-  courses,
-  onAddStub,
-  onDeleteStub,
-  onAssign,
-  onDelete,
-}: CourseGridProps) => {
+const CourseGrid = ({ courses, onOpenCourse, onDelete }: CourseGridProps) => {
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       {courses.map((course) => (
@@ -27,9 +19,7 @@ const CourseGrid = ({
           instructor={course.instructor}
           deviceMac={course.deviceMac}
           roomName={course.roomName}
-          onAddStub={() => onAddStub(course.courseId)}
-          onDeleteStub={onDeleteStub}
-          onAssign={() => onAssign(course.courseId)}
+          onOpen={() => onOpenCourse(course.courseId)}
           onDelete={() => onDelete(course.courseId)}
         />
       ))}

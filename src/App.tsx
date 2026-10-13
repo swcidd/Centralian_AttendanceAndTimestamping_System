@@ -8,6 +8,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import ActivityPage from "./pages/ActivityPage";
 import TrackingPage from "./pages/TrackingPage";
 import CoursesPage from "./pages/CoursesPage";
+import CourseDetailPage from "./pages/CourseDetailPage";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/tracking" element={<TrackingPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/courses" element={<CoursesPage />} />
+          <Route path="/courses/:courseId" element={<CourseDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

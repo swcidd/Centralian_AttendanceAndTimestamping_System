@@ -141,6 +141,56 @@ export async function fetchCourses(): Promise<Course[]> {
   });
 }
 
+// Fetches a single course with its sections. Used by the course detail
+// page; shares the same query shape as fetchCourses().
+export async function fetchCourse(courseId: string): Promise<Course | null> {
+  const [courseResult, devicesResult] = await Promise.all([
+    supabase
+      .from("courses")
+      .select(
+        "course_id, course_code, course_name, stubcodes(course_stubcode, course_type, stubcode_schedules(schedule_room, schedule_day, schedule_start, schedule_end)), instructors(first_name, last_name)"
+      )
+      .eq("course_id", courseId)
+      .returns<CourseRow[]>(),
+    supabase.from("devices").select("device_id, room"),
+  ]);
+
+  if (courseResult.error) throw courseResult.error;
+  const row = (courseResult.data ?? [])[0];
+  if (!row) return null;
+
+  const roomToDevice = new Map<string, string>();
+  for (const device of (devicesResult.data ?? []) as Array<{
+    device_id: string;
+    room: string | null;
+  }>) {
+    if (device.room) roomToDevice.set(device.room, device.device_id);
+  }
+
+  const stubs = row.stubcodes ?? [];
+  const schedules = stubs.flatMap((stub) => stub.stubcode_schedules ?? []);
+  const room = schedules[0]?.schedule_room ?? null;
+
+  return {
+    courseId: row.course_id,
+    sections: stubs
+      .map((stub) => ({
+        code: String(stub.course_stubcode),
+        type: stub.course_type,
+      }))
+      .sort(
+        (a, b) => a.code.localeCompare(b.code) || a.type.localeCompare(b.type)
+      ),
+    name: row.course_name,
+    schedule: formatSchedule(schedules),
+    instructor: row.instructors
+      ? `${row.instructors.first_name} ${row.instructors.last_name}`
+      : "Unassigned",
+    deviceMac: room ? roomToDevice.get(room) ?? null : null,
+    roomName: room,
+  };
+}
+
 // Registered terminals (the `devices` registry). Used to offer known
 // terminals in the assignment UI instead of typing a raw MAC from
 // memory.

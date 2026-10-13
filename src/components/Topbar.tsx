@@ -22,6 +22,11 @@ const Topbar = ({ toggleSidebar }: TopbarProps) => {
         className="cursor-pointer stroke-2 p-1 text-3xl text-white lg:hidden"
         onClick={toggleSidebar}
       />
+      <img
+        src="/assets/logo/cdnlogo.com_central-philippine-university-logo.svg"
+        alt="CPU Logo"
+        className="h-9 w-9 shrink-0 rounded-full object-contain"
+      />
       <h1 className="text-xl font-bold tracking-tight text-white">
         Centralian Attendance & Timestamping System
       </h1>

@@ -49,11 +49,6 @@ bool nfcBegin() {
   for (int attempt = 0; attempt < 3; ++attempt) {
     if (nfc.getFirmwareVersion() != 0) {
       nfc.SAMConfig();
-      // Cap passive-activation retries: the PN532 default (0xFF) means
-      // InListPassiveTarget never answers until a card appears, which
-      // blocks loop() and starves the HTTP server. One retry makes each
-      // poll return promptly when the antenna is empty.
-      nfc.setPassiveActivationRetries(0x01);
       return true;
     }
     delay(200);

@@ -20,6 +20,16 @@ const uint8_t REGISTRATION_DATA_BLOCKS[21] = {
   28, 29, 30    // sector 7
 };
 uint8_t defaultMifareKey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+// Bound every card poll. Adafruit_PN532's readPassiveTargetID() defaults
+// to timeout 0, which its own header documents as "will block forever" —
+// and with the PN532's default passive-activation retries (0xFF) the
+// InListPassiveTarget command then never answers until a card is present.
+// A blocking read like that starves loop()'s server.handleClient(), so the
+// on-device /health and /encode endpoints accept the TCP connection but
+// never write a response. A bounded poll keeps the loop free to service
+// HTTP while still detecting taps.
+const uint16_t PN532_READ_TIMEOUT_MS = 200;
 }  // namespace
 
 // (irq, reset) — not (sda, scl); this library has no SDA/SCL-taking
@@ -39,6 +49,11 @@ bool nfcBegin() {
   for (int attempt = 0; attempt < 3; ++attempt) {
     if (nfc.getFirmwareVersion() != 0) {
       nfc.SAMConfig();
+      // Cap passive-activation retries: the PN532 default (0xFF) means
+      // InListPassiveTarget never answers until a card appears, which
+      // blocks loop() and starves the HTTP server. One retry makes each
+      // poll return promptly when the antenna is empty.
+      nfc.setPassiveActivationRetries(0x01);
       return true;
     }
     delay(200);
@@ -50,7 +65,7 @@ String nfcReadUid() {
   uint8_t uid[7];
   uint8_t uidLength;
 
-  bool success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
+  bool success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, PN532_READ_TIMEOUT_MS);
   if (!success) {
     return "";
   }
@@ -68,7 +83,7 @@ CardData nfcReadData() {
   uint8_t uid[7];
   uint8_t uidLength;
 
-  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength)) {
+  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, PN532_READ_TIMEOUT_MS)) {
     return CardData{"", "", "", "", false};
   }
 
@@ -227,7 +242,7 @@ bool nfcWriteData(const String& schoolId, const String& firstName,
   uint8_t uidLength;
 
   Serial.println("[nfcWriteData] Tap a card to write...");
-  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength)) {
+  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, PN532_READ_TIMEOUT_MS)) {
     return false;
   }
 

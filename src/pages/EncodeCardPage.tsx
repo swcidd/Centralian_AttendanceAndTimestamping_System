@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { encodeCard, fetchEncoderHealth, type EncodeCardResult } from "../services/cardEncoderApi";
+import {
+  encodeCard,
+  fetchEncoderHealth,
+  getEncoderUrl,
+  setEncoderUrl,
+  type EncodeCardResult,
+} from "../services/cardEncoderApi";
 
 type Health = "checking" | "online" | "offline";
 type Phase = "idle" | "waiting" | "success" | "error";
@@ -30,6 +36,7 @@ const EncodeCardPage = () => {
   const [lastName, setLastName] = useState("");
   const [result, setResult] = useState<EncodeCardResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readerUrl, setReaderUrl] = useState(() => getEncoderUrl());
 
   const runHealthCheck = () =>
     fetchEncoderHealth()
@@ -79,7 +86,7 @@ const EncodeCardPage = () => {
       setError(
         err instanceof Error && err.name === "AbortError"
           ? "Timed out waiting for a card. Try again and tap the card promptly."
-          : "Could not reach the card reader. Check that the ESP32/PN532 is powered and on the same network."
+          : `Could not reach the reader at ${getEncoderUrl()}. Check the ESP32/PN532 is powered and on the same network.`
       );
     }
   };
@@ -140,23 +147,68 @@ const EncodeCardPage = () => {
             is tapped in the system.
           </p>
 
-          <div className="mb-4 flex justify-center">
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                health === "online"
-                  ? "bg-green-500"
+          <div className="mb-4 flex flex-col items-center gap-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  health === "online"
+                    ? "bg-green-500"
+                    : health === "offline"
+                      ? "bg-red-500"
+                      : "bg-gray-400"
+                }`}
+              />
+              <span className="text-navy/60">
+                {health === "online"
+                  ? "Reader connected"
                   : health === "offline"
-                    ? "bg-red-500"
-                    : "bg-gray-400"
-              }`}
-            />
-            <span className="text-navy/60">
-              {health === "online"
-                ? "Reader connected"
-                : health === "offline"
-                  ? "Reader not reachable"
-                  : "Checking reader..."}
-            </span>
+                    ? "Reader not reachable"
+                    : "Checking reader..."}
+              </span>
+            </div>
+
+            {health === "online" && (
+              <span className="text-navy/40 font-mono text-[11px]">
+                {getEncoderUrl()}
+              </span>
+            )}
+
+            {health === "offline" && (
+              <div className="w-full rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <p className="mb-2">
+                  Nothing answered at{" "}
+                  <span className="font-mono">{getEncoderUrl()}</span>. Enter the
+                  reader's address and retry — the ESP32 terminal prints its IP to
+                  Serial at boot.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={readerUrl}
+                    onChange={(e) => setReaderUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    onBlur={() => {
+                      setEncoderUrl(readerUrl);
+                      void runHealthCheck();
+                    }}
+                    placeholder="http://192.168.0.50:8787"
+                    className="border-tan text-navy placeholder:text-navy/50 focus:border-orange w-full rounded-md border px-2 py-1 text-xs outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEncoderUrl(readerUrl);
+                      void runHealthCheck();
+                    }}
+                    className="bg-orange shrink-0 rounded-md px-2 py-1 text-xs font-medium text-white hover:brightness-95"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">

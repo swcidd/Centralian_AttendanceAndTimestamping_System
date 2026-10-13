@@ -110,8 +110,7 @@ void setup() {
 
   // Only reduce TX power now, for the ongoing tap loop — this is what
   // actually needs protecting from WiFi bursts racing the PN532's I2C
-  // reads once main.cpp's loop() starts running.
-  WiFi.setTxPower(WIFI_POWER_5dBm);
+ // reads once main.cpp's loop() starts running.
 
   timeSyncBegin();
 

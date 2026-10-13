@@ -12,9 +12,41 @@
 
 const DEFAULT_ENCODER_URL = "http://localhost:8787";
 
+// Build-time default (Vite inlines VITE_ENCODER_URL at build). The reader
+// is a LAN device on a DHCP lease, so this value is usually stale by the
+// time anyone opens the page — it is only the fallback.
 export const ENCODER_API_URL: string =
   (import.meta.env.VITE_ENCODER_URL as string | undefined)?.trim() ||
   DEFAULT_ENCODER_URL;
+
+const ENCODER_URL_STORAGE_KEY = "cats.encoderUrl";
+
+// The address the page should actually talk to right now: the operator's
+// runtime override when one is saved, otherwise the build-time default.
+export function getEncoderUrl(): string {
+  try {
+    return (
+      window.localStorage.getItem(ENCODER_URL_STORAGE_KEY)?.trim() ||
+      ENCODER_API_URL
+    );
+  } catch {
+    return ENCODER_API_URL;
+  }
+}
+
+// Persist a runtime override (blank clears it back to the build default).
+export function setEncoderUrl(url: string): void {
+  try {
+    const trimmed = url.trim();
+    if (trimmed) {
+      window.localStorage.setItem(ENCODER_URL_STORAGE_KEY, trimmed);
+    } else {
+      window.localStorage.removeItem(ENCODER_URL_STORAGE_KEY);
+    }
+  } catch {
+    // Storage disabled (private mode): keep using the build-time value.
+  }
+}
 
 export interface EncoderHealth {
   ok: boolean;
@@ -48,7 +80,7 @@ export async function fetchEncoderHealth(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${ENCODER_API_URL}/health`, {
+    const res = await fetch(`${getEncoderUrl()}/health`, {
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`Encoder server responded ${res.status}`);
@@ -76,7 +108,7 @@ export async function encodeCard(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${ENCODER_API_URL}/encode`, {
+    const res = await fetch(`${getEncoderUrl()}/encode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

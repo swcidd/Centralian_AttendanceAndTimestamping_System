@@ -49,7 +49,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
 
     setIsSubmitting(true);
     try {
-      await assignDevice(course.stub, mac || null, room || null);
+      await assignDevice(course.courseId, mac || null, room || null);
       onAssigned();
       onClose();
     } catch (err) {
@@ -70,7 +70,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
       >
         <h2 className="text-navy mb-1 text-xl font-bold">Assign Terminal</h2>
         <p className="text-navy/60 mb-4 text-sm">
-          {course.name} ({course.stub})
+          {course.name} ({course.stubs.join(", ")})
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">

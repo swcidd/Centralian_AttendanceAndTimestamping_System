@@ -14,33 +14,35 @@ import type { Course, StudentStatus } from "../types/types";
 
 const TrackingPage = () => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  // Sessions, rosters, and enrollment streams are all scoped to a
+  // stubcode now (a course owns many of them), so tracking state keys
+  // off the selected stub rather than the course.
+  const [selectedStub, setSelectedStub] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(
     null
   );
   const [baseRoster, setBaseRoster] = useState<StudentStatus[]>([]);
 
-  // Reset during render (not in an effect) so switching courses clears
-  // the previous course's roster/session before the new fetch resolves,
-  // instead of showing stale data for a frame.
-  const [trackedCourseStub, setTrackedCourseStub] = useState<string | null>(
-    null
-  );
-  if ((selectedCourse?.stub ?? null) !== trackedCourseStub) {
-    setTrackedCourseStub(selectedCourse?.stub ?? null);
+  // Reset during render (not in an effect) so switching stubcodes
+  // clears the previous stub's roster/session before the new fetch
+  // resolves, instead of showing stale data for a frame.
+  const [trackedStub, setTrackedStub] = useState<string | null>(null);
+  if (selectedStub !== trackedStub) {
+    setTrackedStub(selectedStub);
     setActiveSession(null);
     setBaseRoster([]);
   }
 
   const sessionId = activeSession?.sessionId ?? null;
 
-  // The active session for the selected course — TrackingButton reports
-  // changes back into this via onSessionChange (starts/stops), but a
-  // course switch needs its own lookup since no click triggered it.
+  // The active session for the selected stubcode — TrackingButton
+  // reports changes back into this via onSessionChange (starts/stops),
+  // but a stub switch needs its own lookup since no click triggered it.
   useEffect(() => {
-    if (!selectedCourse) return;
+    if (!selectedStub) return;
 
     let cancelled = false;
-    getActiveSession(selectedCourse.stub)
+    getActiveSession(selectedStub)
       .then((session) => {
         if (!cancelled) setActiveSession(session);
       })
@@ -51,18 +53,18 @@ const TrackingPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedCourse]);
+  }, [selectedStub]);
 
-  // The base roster (every enrolled student) plus whatever status the
-  // open session's Attendance_Logs already carry.
+  // The base roster (every student enrolled in the stubcode) plus
+  // whatever status the open session's Attendance_Logs already carry.
   const loadRoster = useMemo(
     () => () => {
-      if (!selectedCourse) return;
-      fetchSessionRoster(selectedCourse.stub, sessionId)
+      if (!selectedStub) return;
+      fetchSessionRoster(selectedStub, sessionId)
         .then(setBaseRoster)
         .catch(() => setBaseRoster([]));
     },
-    [selectedCourse, sessionId]
+    [selectedStub, sessionId]
   );
 
   useEffect(() => {
@@ -75,17 +77,17 @@ const TrackingPage = () => {
   // enrollment turns the existing table into a live registration list for
   // free, without a second parallel data structure.
   useEffect(() => {
-    if (!selectedCourse || activeSession?.status !== "REGISTRATION") return;
+    if (!selectedStub || activeSession?.status !== "REGISTRATION") return;
 
     const channel = supabase
-      .channel(`enrollments:${selectedCourse.stub}`)
+      .channel(`enrollments:${selectedStub}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "enrollments",
-          filter: `stub_code=eq.${selectedCourse.stub}`,
+          filter: `stub_code=eq.${selectedStub}`,
         },
         () => loadRoster()
       )
@@ -94,7 +96,7 @@ const TrackingPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedCourse, activeSession?.status, loadRoster]);
+  }, [selectedStub, activeSession?.status, loadRoster]);
 
   // Live taps stream in via realtime; fold them onto the base roster
   // through the pure reducer rather than re-fetching per tap. Folding
@@ -115,15 +117,21 @@ const TrackingPage = () => {
   }, [baseRoster, taps]);
 
   const needsCalibration =
-    selectedCourse !== null && !activeSession && baseRoster.length === 0;
+    selectedStub !== null && !activeSession && baseRoster.length === 0;
 
   return (
     <div className="bg-cream min-h-screen space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
-        <TrackingFilters onCourseSelect={setSelectedCourse} />
+        <TrackingFilters
+          onFilterChange={(course, stub) => {
+            setSelectedCourse(course);
+            setSelectedStub(stub);
+          }}
+        />
         <TrackingButton
-          key={selectedCourse?.stub ?? "none"}
+          key={selectedStub ?? "none"}
           course={selectedCourse}
+          stub={selectedStub}
           activeSession={activeSession}
           onSessionChange={setActiveSession}
         />
@@ -132,7 +140,7 @@ const TrackingPage = () => {
       {needsCalibration ? (
         <div className="border-tan flex flex-col items-center gap-2 rounded-xl border bg-white p-12 text-center shadow-sm">
           <p className="text-navy font-medium">
-            No students enrolled in this course yet.
+            No students enrolled in this stubcode yet.
           </p>
           <p className="text-navy/60 max-w-sm text-sm">
             Pick Start Registration above and have students tap their cards

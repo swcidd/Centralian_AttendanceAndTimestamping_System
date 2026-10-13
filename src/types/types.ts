@@ -22,7 +22,9 @@ export interface Activity {
 };
 
 export interface Course {
-  stub: string;
+  courseId: string;
+  /** All stubcodes belonging to this course (Course 1:N Stubcode). */
+  stubs: string[];
   name: string;
   schedule: string;
   instructor: string;

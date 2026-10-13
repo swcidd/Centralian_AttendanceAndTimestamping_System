@@ -45,8 +45,7 @@ const ActivityPage = () => {
       <div className="grid gap-6 lg:grid-cols-[180px_1fr_320px]">
         <section>
           <ActivityFilters
-            selectedStub={selectedStub}
-            onStubChange={setSelectedStub}
+            onFilterChange={(_, stub) => setSelectedStub(stub ?? "")}
           />
         </section>
         <section>

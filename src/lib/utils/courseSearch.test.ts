@@ -4,7 +4,8 @@ import type { Course } from "../../types/types";
 
 const courses: Course[] = [
   {
-    stub: "CS101-A",
+    courseId: "course-1",
+    stubs: ["CS101-A", "CS101-B"],
     name: "Intro to Computer Science",
     schedule: "MWF, 08:00 - 09:00",
     instructor: "Prof. Ada Lovelace",
@@ -12,7 +13,8 @@ const courses: Course[] = [
     roomName: "Room 205",
   },
   {
-    stub: "SE101-B",
+    courseId: "course-2",
+    stubs: ["SE101-B"],
     name: "Software Engineering 101",
     schedule: "TTh, 13:00 - 15:00",
     instructor: "Prof. Grace Hopper",
@@ -38,6 +40,12 @@ describe("matchesCourseSearch", () => {
   it("matches a stub code case-insensitively", () => {
     expect(courses.filter(matchesCourseSearch("se101"))).toEqual([courses[1]]);
     expect(courses.filter(matchesCourseSearch("CS101"))).toEqual([courses[0]]);
+  });
+
+  it("matches a course through any of its stubcodes", () => {
+    // A course owns many stubcodes — searching a secondary one still
+    // finds the course.
+    expect(courses.filter(matchesCourseSearch("cs101-b"))).toEqual([courses[0]]);
   });
 
   it("matches an instructor name case-insensitively", () => {

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { CgProfile } from "react-icons/cg";
 import { supabase } from "../lib/supabase";
 
@@ -7,6 +7,36 @@ const Login = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+
+  // Read-only session check: an already-authenticated visitor should
+  // land on the dashboard, not stare at a login form and assume they
+  // were logged out (e.g. after coming back from the standalone
+  // /encode page). This never modifies the session — it only reflects
+  // it, so visiting or leaving this page can't change login status.
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setHasSession(Boolean(data.session));
+      setSessionChecked(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!sessionChecked) {
+    return (
+      <div className="bg-cream flex min-h-screen items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+  if (hasSession) {
+    return <Navigate to="/tracking" replace />;
+  }
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { CgProfile } from "react-icons/cg";
 
 import {
@@ -28,6 +28,7 @@ function payloadBytes(schoolId: string, firstName: string, lastName: string) {
 }
 
 const EncodeCardPage = () => {
+  const navigate = useNavigate();
   const [health, setHealth] = useState<Health>("checking");
   const [phase, setPhase] = useState<Phase>("idle");
   const [schoolId, setSchoolId] = useState("");
@@ -96,15 +97,34 @@ const EncodeCardPage = () => {
     setLastName("");
   };
 
+  // Auth-neutral back navigation. This page must never imply that
+  // login is part of the encode flow (or that visiting it changed
+  // your login state), so: go wherever the user came from — the
+  // dashboard's sidebar when signed in, the login page when not.
+  // Direct hits (fresh tab/bookmark) have no in-app history, so fall
+  // back to "/" (which routes onward appropriately). No supabase code
+  // lives on this page — it works signed in or out, unchanged.
+  const goBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/");
+    }
+  };
+
   return (
     <div className="bg-cream min-h-screen flex flex-col">
       <header className="border-tan bg-orange px-4 py-2 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight text-white">
           Centralian Attendance & Timestamping System
         </h1>
-        <Link to="/login" className="text-sm font-medium text-white/90 hover:underline">
-          Back to login
-        </Link>
+        <button
+          type="button"
+          onClick={goBack}
+          className="text-sm font-medium text-white/90 hover:underline"
+        >
+          &larr; Back
+        </button>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-4">

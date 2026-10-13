@@ -5,24 +5,34 @@ import CourseCard from "./CourseCard";
 
 interface CourseGridProps {
   courses: Course[];
-  onAssign: (stub: string) => void;
-  onDelete: (stub: string) => void;
+  onAddStub: (courseId: string) => void;
+  onDeleteStub: (stub: string) => void;
+  onAssign: (courseId: string) => void;
+  onDelete: (courseId: string) => void;
 }
 
-const CourseGrid = ({ courses, onAssign, onDelete }: CourseGridProps) => {
+const CourseGrid = ({
+  courses,
+  onAddStub,
+  onDeleteStub,
+  onAssign,
+  onDelete,
+}: CourseGridProps) => {
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       {courses.map((course) => (
         <CourseCard
-          key={course.stub}
-          stub={course.stub}
+          key={course.courseId}
+          stubs={course.stubs}
           name={course.name}
           schedule={course.schedule}
           instructor={course.instructor}
           deviceMac={course.deviceMac}
           roomName={course.roomName}
-          onAssign={() => onAssign(course.stub)}
-          onDelete={() => onDelete(course.stub)}
+          onAddStub={() => onAddStub(course.courseId)}
+          onDeleteStub={onDeleteStub}
+          onAssign={() => onAssign(course.courseId)}
+          onDelete={() => onDelete(course.courseId)}
         />
       ))}
     </div>

@@ -1,8 +1,6 @@
 import { Course } from "../../types/types";
 import CourseCard from "./CourseCard";
 
-
-
 interface CourseGridProps {
   courses: Course[];
   onAddStub: (courseId: string) => void;

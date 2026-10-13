@@ -9,40 +9,45 @@ import { DB_STATUS_TO_UI, fetchSessionRoster } from "../services/attendanceApi";
 import { useRealtimeAttendance } from "../hooks/useRealtimeAttendance";
 import { supabase } from "../lib/supabase";
 import { attendanceReducer, type RosterState } from "../lib/utils/attendanceReducer";
+import { sectionKey } from "../lib/utils/section";
 
-import type { Course, StudentStatus } from "../types/types";
+import type { Course, CourseSection, StudentStatus } from "../types/types";
 
 const TrackingPage = () => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   // Sessions, rosters, and enrollment streams are all scoped to a
-  // stubcode now (a course owns many of them), so tracking state keys
-  // off the selected stub rather than the course.
-  const [selectedStub, setSelectedStub] = useState<string | null>(null);
+  // section now (a course owns many of them), so tracking state keys
+  // off the selected section rather than the course.
+  const [selectedSection, setSelectedSection] = useState<CourseSection | null>(
+    null
+  );
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(
     null
   );
   const [baseRoster, setBaseRoster] = useState<StudentStatus[]>([]);
 
-  // Reset during render (not in an effect) so switching stubcodes
-  // clears the previous stub's roster/session before the new fetch
+  const selectedKey = selectedSection ? sectionKey(selectedSection) : null;
+
+  // Reset during render (not in an effect) so switching sections
+  // clears the previous section's roster/session before the new fetch
   // resolves, instead of showing stale data for a frame.
-  const [trackedStub, setTrackedStub] = useState<string | null>(null);
-  if (selectedStub !== trackedStub) {
-    setTrackedStub(selectedStub);
+  const [trackedKey, setTrackedKey] = useState<string | null>(null);
+  if (selectedKey !== trackedKey) {
+    setTrackedKey(selectedKey);
     setActiveSession(null);
     setBaseRoster([]);
   }
 
   const sessionId = activeSession?.sessionId ?? null;
 
-  // The active session for the selected stubcode — TrackingButton
+  // The active session for the selected section — TrackingButton
   // reports changes back into this via onSessionChange (starts/stops),
-  // but a stub switch needs its own lookup since no click triggered it.
+  // but a section switch needs its own lookup since no click triggered it.
   useEffect(() => {
-    if (!selectedStub) return;
+    if (!selectedSection) return;
 
     let cancelled = false;
-    getActiveSession(selectedStub)
+    getActiveSession(selectedSection)
       .then((session) => {
         if (!cancelled) setActiveSession(session);
       })
@@ -53,18 +58,18 @@ const TrackingPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedStub]);
+  }, [selectedSection]);
 
-  // The base roster (every student enrolled in the stubcode) plus
+  // The base roster (every student enrolled in the section) plus
   // whatever status the open session's Attendance_Logs already carry.
   const loadRoster = useMemo(
     () => () => {
-      if (!selectedStub) return;
-      fetchSessionRoster(selectedStub, sessionId)
+      if (!selectedSection) return;
+      fetchSessionRoster(selectedSection, sessionId)
         .then(setBaseRoster)
         .catch(() => setBaseRoster([]));
     },
-    [selectedStub, sessionId]
+    [selectedSection, sessionId]
   );
 
   useEffect(() => {
@@ -75,19 +80,21 @@ const TrackingPage = () => {
   // branch) — each creates a Students + Enrollments row instead.
   // Re-running the same roster fetch on every new enrollment turns the
   // existing table into a live registration list for free, without a
-  // second parallel data structure.
+  // second parallel data structure. The filter is on the stubcode alone
+  // (Postgres changes take a single column), so a tap in the sibling
+  // type sharing the number just triggers a harmless refetch.
   useEffect(() => {
-    if (!selectedStub || activeSession?.status !== "REGISTRATION") return;
+    if (!selectedSection || activeSession?.status !== "REGISTRATION") return;
 
     const channel = supabase
-      .channel(`enrollments:${selectedStub}`)
+      .channel(`enrollments:${sectionKey(selectedSection)}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "enrollments",
-          filter: `course_stubcode=eq.${selectedStub}`,
+          filter: `course_stubcode=eq.${selectedSection.code}`,
         },
         () => loadRoster()
       )
@@ -96,7 +103,7 @@ const TrackingPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedStub, activeSession?.status, loadRoster]);
+  }, [selectedSection, activeSession?.status, loadRoster]);
 
   // Live taps stream in via realtime; fold them onto the base roster
   // through the pure reducer rather than re-fetching per tap. Folding
@@ -117,21 +124,21 @@ const TrackingPage = () => {
   }, [baseRoster, taps]);
 
   const needsCalibration =
-    selectedStub !== null && !activeSession && baseRoster.length === 0;
+    selectedSection !== null && !activeSession && baseRoster.length === 0;
 
   return (
     <div className="bg-cream min-h-screen space-y-6 p-6">
       <div className="flex items-center justify-between gap-4">
         <TrackingFilters
-          onFilterChange={(course, stub) => {
+          onFilterChange={(course, section) => {
             setSelectedCourse(course);
-            setSelectedStub(stub);
+            setSelectedSection(section);
           }}
         />
         <TrackingButton
-          key={selectedStub ?? "none"}
+          key={selectedKey ?? "none"}
           course={selectedCourse}
-          stub={selectedStub}
+          section={selectedSection}
           activeSession={activeSession}
           onSessionChange={setActiveSession}
         />

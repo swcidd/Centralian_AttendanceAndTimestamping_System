@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import type { CourseSection } from "../types/types";
 
 export type SessionMode = "ACTIVE_ATTENDANCE" | "REGISTRATION";
 
@@ -41,14 +42,15 @@ async function invokeRoomAction(
 
 // The section's live room mode. `room_modes.room` is the primary key, so
 // a section (and a room) can have at most one open mode; the dashboard
-// only ever needs the single row for the selected stubcode.
+// only ever needs the single row for the selected section.
 export async function getActiveSession(
-  stubCode: string
+  section: CourseSection
 ): Promise<ActiveSession | null> {
   const { data, error } = await supabase
     .from("room_modes")
     .select("room, mode, session_id")
-    .eq("course_stubcode", Number(stubCode))
+    .eq("course_stubcode", Number(section.code))
+    .eq("course_type", section.type)
     .maybeSingle();
 
   if (error) throw error;
@@ -56,20 +58,21 @@ export async function getActiveSession(
 
   return {
     sessionId: (data.session_id as string | null) ?? null,
-    stubCode: String(stubCode),
+    stubCode: section.code,
     deviceMac: data.room as string,
     status: DB_TO_MODE[data.mode as DbRoomMode],
   };
 }
 
 export async function startSession(
-  stubCode: string,
+  section: CourseSection,
   deviceMac: string,
   mode: SessionMode = "ACTIVE_ATTENDANCE"
 ): Promise<void> {
   await invokeRoomAction({
     action: mode === "REGISTRATION" ? "start_enrollment" : "start_attendance",
-    course_stubcode: Number(stubCode),
+    course_stubcode: Number(section.code),
+    course_type: section.type,
     device_id: deviceMac,
   });
 }

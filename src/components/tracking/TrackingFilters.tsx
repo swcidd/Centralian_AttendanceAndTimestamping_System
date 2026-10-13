@@ -1,21 +1,28 @@
 import { useEffect, useState } from "react";
 
 import { fetchCourses } from "../../services/coursesApi";
-import type { Course } from "../../types/types";
+import {
+  parseSectionKey,
+  sectionKey,
+  sectionLabel,
+} from "../../lib/utils/section";
+import type { Course, CourseSection } from "../../types/types";
 
 interface TrackingFiltersProps {
   // Emits the pair together so parent state can never drift out of
-  // sync: picking a course also resolves its first stubcode.
-  onFilterChange: (course: Course | null, stub: string | null) => void;
+  // sync: picking a course also resolves its first section.
+  onFilterChange: (course: Course | null, section: CourseSection | null) => void;
 }
 
-// Cascading Course -> Stubcode filter. A course owns many stubcodes
-// (Course 1:N Stubcode); the stub dropdown only ever lists the
-// selected course's codes and auto-selects the first of them.
+// Cascading Course -> Section filter. A course owns many sections
+// (Course 1:N Section); the section dropdown only ever lists the
+// selected course's sections and auto-selects the first of them. A
+// number may repeat when the types differ, so options are labelled with
+// the type and valued by (code, type).
 const TrackingFilters = ({ onFilterChange }: TrackingFiltersProps) => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedStub, setSelectedStub] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
 
   useEffect(() => {
     fetchCourses()
@@ -29,15 +36,15 @@ const TrackingFilters = ({ onFilterChange }: TrackingFiltersProps) => {
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const course =
       courses.find((c) => c.courseId === e.target.value) ?? null;
-    const stub = course?.stubs[0] ?? null;
+    const section = course?.sections[0] ?? null;
     setSelectedCourseId(e.target.value);
-    setSelectedStub(stub ?? "");
-    onFilterChange(course, stub);
+    setSelectedSection(section ? sectionKey(section) : "");
+    onFilterChange(course, section);
   };
 
-  const handleStubChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedStub(e.target.value);
-    onFilterChange(selectedCourse, e.target.value || null);
+  const handleSectionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSection(e.target.value);
+    onFilterChange(selectedCourse, parseSectionKey(e.target.value));
   };
 
   const selectClass =
@@ -60,17 +67,17 @@ const TrackingFilters = ({ onFilterChange }: TrackingFiltersProps) => {
         ))}
       </select>
       <select
-        value={selectedStub}
-        onChange={handleStubChange}
+        value={selectedSection}
+        onChange={handleSectionChange}
         disabled={!selectedCourse}
         className={selectClass}
       >
         <option value="" disabled>
           Stub Code
         </option>
-        {(selectedCourse?.stubs ?? []).map((stub) => (
-          <option key={stub} value={stub}>
-            {stub}
+        {(selectedCourse?.sections ?? []).map((section) => (
+          <option key={sectionKey(section)} value={sectionKey(section)}>
+            {sectionLabel(section)}
           </option>
         ))}
       </select>

@@ -1,12 +1,10 @@
-import { Course } from "../../types/types";
+import type { Course, CourseSection } from "../../types/types";
 import CourseCard from "./CourseCard";
-
-
 
 interface CourseGridProps {
   courses: Course[];
   onAddStub: (courseId: string) => void;
-  onDeleteStub: (stub: string) => void;
+  onDeleteStub: (section: CourseSection) => void;
   onAssign: (courseId: string) => void;
   onDelete: (courseId: string) => void;
 }
@@ -23,8 +21,7 @@ const CourseGrid = ({
       {courses.map((course) => (
         <CourseCard
           key={course.courseId}
-          stubs={course.stubs}
-          stubTypes={course.stubTypes}
+          sections={course.sections}
           name={course.name}
           schedule={course.schedule}
           instructor={course.instructor}

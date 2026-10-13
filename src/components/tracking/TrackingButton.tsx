@@ -8,19 +8,19 @@ import {
   type SessionMode,
 } from "../../services/sessionsApi";
 import { getErrorMessage } from "../../lib/errors";
-import type { Course } from "../../types/types";
+import type { Course, CourseSection } from "../../types/types";
 
 interface TrackingButtonProps {
   course: Course | null;
-  /** The stubcode whose session is being started/stopped. */
-  stub: string | null;
+  /** The section whose session is being started/stopped. */
+  section: CourseSection | null;
   activeSession: ActiveSession | null;
   onSessionChange: (session: ActiveSession | null) => void;
 }
 
 const TrackingButton = ({
   course,
-  stub,
+  section,
   activeSession,
   onSessionChange,
 }: TrackingButtonProps) => {
@@ -29,7 +29,7 @@ const TrackingButton = ({
   const [mode, setMode] = useState<SessionMode>("ACTIVE_ATTENDANCE");
 
   const handleClick = async () => {
-    if (!course || !stub) return;
+    if (!course || !section) return;
     setError(null);
     setIsBusy(true);
 
@@ -42,8 +42,8 @@ const TrackingButton = ({
           setError("This course has no terminal assigned yet.");
           return;
         }
-        await startSession(stub, course.deviceMac, mode);
-        const session = await getActiveSession(stub);
+        await startSession(section, course.deviceMac, mode);
+        const session = await getActiveSession(section);
         onSessionChange(session);
       }
     } catch (err) {
@@ -75,7 +75,7 @@ const TrackingButton = ({
         )}
         <button
           onClick={handleClick}
-          disabled={!course || !stub || isBusy}
+          disabled={!course || !section || isBusy}
           className="bg-orange rounded-lg px-5 py-2.5 font-medium text-white shadow-sm transition hover:brightness-95 active:scale-90 disabled:opacity-60"
         >
           {activeSession ? "Stop" : "Start"}

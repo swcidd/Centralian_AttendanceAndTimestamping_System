@@ -15,7 +15,11 @@ const inputClass =
 // Adds another independent section to an existing course. The section gets
 // its own class type and its own schedule/terminal — it does NOT inherit
 // the course's, unlike the previous shared-schedule behaviour.
-const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) => {
+const AddStubcodeModal = ({
+  course,
+  onClose,
+  onAdded,
+}: AddStubcodeModalProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,7 +31,9 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
     const stubCode = (formData.get("stubCode") as string).trim();
     if (!stubCode) return;
 
-    const deviceMac = (formData.get("deviceMac") as string).trim().toUpperCase();
+    const deviceMac = (formData.get("deviceMac") as string)
+      .trim()
+      .toUpperCase();
     const roomName = (formData.get("roomName") as string).trim();
     if (deviceMac && !roomName) {
       setError("Room name is required when assigning a device.");
@@ -64,8 +70,7 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
       >
         <h2 className="text-navy mb-1 text-xl font-bold">Add Stubcode</h2>
         <p className="text-navy/60 mb-4 text-sm">
-          New section for <span className="font-medium">{course.name}</span> —
-          it carries its own class type, schedule, and terminal.
+          New stubcode for <span className="font-medium">{course.name}</span>.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -96,7 +101,12 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <input type="time" name="startTime" required className={inputClass} />
+            <input
+              type="time"
+              name="startTime"
+              required
+              className={inputClass}
+            />
             <input type="time" name="endTime" required className={inputClass} />
           </div>
 

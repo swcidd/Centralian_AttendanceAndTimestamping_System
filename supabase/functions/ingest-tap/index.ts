@@ -5,7 +5,8 @@
 // derived server-side from the calling device's MAC: the browser can
 // never tell the backend "this tap happened in room X".
 //
-// The tap is resolved against the room's current mode:
+// The tap is resolved against the room's current mode, which names the
+// section as (course_stubcode, course_type):
 //   enroll  → the first tap of an encoded card creates Student + Card +
 //             Enrollment (this is the registration flow)
 //   attend  → the tap stamps the pre-generated absent attendance row
@@ -17,6 +18,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { isClockSkewValid, verifyDeviceSignature } from "../_shared/deviceAuth.ts";
 
 const PSK = Deno.env.get("DEVICE_PSK")!;
+
+type CourseType = "lect" | "lab";
 
 interface TapPayload {
   device_mac: string;
@@ -106,6 +109,7 @@ Deno.serve(async (req) => {
     mode?: "enroll" | "attend" | null;
     student_id?: string | null;
     course_stubcode?: number | null;
+    course_type?: CourseType | null;
     session_id?: string | null;
   }) => {
     await admin.from("scan_logs").insert({
@@ -115,6 +119,7 @@ Deno.serve(async (req) => {
       result: fields.result,
       student_id: fields.student_id ?? null,
       course_stubcode: fields.course_stubcode ?? null,
+      course_type: fields.course_type ?? null,
       session_id: fields.session_id ?? null,
     });
   };
@@ -135,7 +140,7 @@ Deno.serve(async (req) => {
   // 2. Is the room in a mode at all?
   const { data: mode } = await admin
     .from("room_modes")
-    .select("mode, course_stubcode, session_id")
+    .select("mode, course_stubcode, course_type, session_id")
     .eq("room", room)
     .maybeSingle();
 
@@ -145,6 +150,7 @@ Deno.serve(async (req) => {
   }
 
   const courseStubcode = mode.course_stubcode as number;
+  const courseType = mode.course_type as CourseType;
   const modeType = mode.mode as "enroll" | "attend";
 
   // 3. Which student does this card belong to, if any?
@@ -193,6 +199,7 @@ Deno.serve(async (req) => {
       .from("enrollments")
       .select("enrollment_id, dropped_at")
       .eq("course_stubcode", courseStubcode)
+      .eq("course_type", courseType)
       .eq("student_id", studentId)
       .maybeSingle();
 
@@ -203,6 +210,7 @@ Deno.serve(async (req) => {
         mode: modeType,
         student_id: studentId,
         course_stubcode: courseStubcode,
+        course_type: courseType,
       });
       return json({ result: "duplicate" });
     }
@@ -215,6 +223,7 @@ Deno.serve(async (req) => {
     } else {
       await admin.from("enrollments").insert({
         course_stubcode: courseStubcode,
+        course_type: courseType,
         student_id: studentId,
       });
     }
@@ -225,6 +234,7 @@ Deno.serve(async (req) => {
       mode: modeType,
       student_id: studentId,
       course_stubcode: courseStubcode,
+      course_type: courseType,
     });
     return json({ result: "ok", enrolled: true, created });
   }
@@ -239,6 +249,7 @@ Deno.serve(async (req) => {
     .from("enrollments")
     .select("enrollment_id")
     .eq("course_stubcode", courseStubcode)
+    .eq("course_type", courseType)
     .eq("student_id", studentId)
     .is("dropped_at", null)
     .maybeSingle();
@@ -250,6 +261,7 @@ Deno.serve(async (req) => {
       mode: modeType,
       student_id: studentId,
       course_stubcode: courseStubcode,
+      course_type: courseType,
     });
     return json({ result: "not_enrolled" });
   }
@@ -286,6 +298,7 @@ Deno.serve(async (req) => {
       mode: modeType,
       student_id: studentId,
       course_stubcode: courseStubcode,
+      course_type: courseType,
       session_id: mode.session_id,
     });
     return json({ result: "duplicate", attendance_status: attendanceRow.status });
@@ -305,6 +318,7 @@ Deno.serve(async (req) => {
       session_id: mode.session_id,
       enrollment_id: enrollment.enrollment_id,
       course_stubcode: courseStubcode,
+      course_type: courseType,
       status: attendanceStatus,
       attendance_timestamp: new Date().toISOString(),
       source: "system",
@@ -317,6 +331,7 @@ Deno.serve(async (req) => {
     mode: modeType,
     student_id: studentId,
     course_stubcode: courseStubcode,
+    course_type: courseType,
     session_id: mode.session_id,
   });
 

@@ -18,7 +18,8 @@ import {
   stubDeleteConfirm,
 } from "../lib/utils/deleteConfirm";
 import AddStubcodeModal from "../components/courses/AddStubcodeModal";
-import type { Course } from "../types/types";
+import { sectionLabel } from "../lib/utils/section";
+import type { Course, CourseSection } from "../types/types";
 
 const CoursesPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -46,7 +47,7 @@ const CoursesPage = () => {
     let attendance = 0;
     if (course) {
       try {
-        attendance = await countAttendance(course.stubs);
+        attendance = await countAttendance(course.sections);
       } catch (err) {
         setError(
           getErrorMessage(err, "Failed to check this course's attendance records.")
@@ -67,13 +68,19 @@ const CoursesPage = () => {
     }
   };
 
-  const handleDeleteStub = async (stub: string) => {
-    const course = courses.find((c) => c.stubs.includes(stub));
+  const handleDeleteStub = async (section: CourseSection) => {
+    const course = courses.find((c) =>
+      c.sections.some(
+        (s) => s.code === section.code && s.type === section.type
+      )
+    );
     if (!course) return;
 
-    if (course.stubs.length === 1) {
+    // A course is its sections; deleting the last one leaves an empty
+    // shell, so steer the operator to delete the course instead.
+    if (course.sections.length === 1) {
       setError(
-        `"${course.name}" needs at least one stubcode — delete the course instead.`
+        `"${course.name}" needs at least one section — delete the course instead.`
       );
       return;
     }
@@ -81,7 +88,7 @@ const CoursesPage = () => {
 
     let attendance: number;
     try {
-      attendance = await countAttendance([stub]);
+      attendance = await countAttendance([section]);
     } catch (err) {
       setError(
         getErrorMessage(err, "Failed to check this stubcode's attendance records.")
@@ -89,11 +96,11 @@ const CoursesPage = () => {
       return;
     }
 
-    if (!window.confirm(stubDeleteConfirm(stub, attendance))) {
+    if (!window.confirm(stubDeleteConfirm(sectionLabel(section), attendance))) {
       return;
     }
     try {
-      await deleteStubcode(stub);
+      await deleteStubcode(section);
       loadCourses();
     } catch (err) {
       setError(getErrorMessage(err, "Failed to delete stubcode."));

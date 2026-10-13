@@ -6,6 +6,9 @@
 // writes go through the service_role client, which is why the browser
 // never needs write access to session / attendance / mode tables.
 //
+// A section is identified by (course_stubcode, course_type): the same
+// number may exist as both a lecture and a lab.
+//
 // Actions:
 //   start_attendance  open the room's 'attend' mode: create (or reuse)
 //                     today's class_session, pre-generate absent
@@ -33,9 +36,16 @@ function manilaISODay(): number {
   return day === 0 ? 7 : day; // 1 = Monday ... 7 = Sunday
 }
 
+type CourseType = "lect" | "lab";
+
+function parseCourseType(value: unknown): CourseType | null {
+  return value === "lect" || value === "lab" ? value : null;
+}
+
 interface RequestBody {
   action?: string;
   course_stubcode?: number | string;
+  course_type?: string;
   device_id?: string;
   room?: string;
   session_id?: string | null;
@@ -64,20 +74,26 @@ Deno.serve(async (req) => {
 
   const admin: SupabaseClient = createClient(supabaseUrl, serviceKey);
   const courseStubcode = Number(body.course_stubcode);
+  const courseType = parseCourseType(body.course_type);
 
   // The instructor owns a section directly, or is listed as a co-teacher.
-  const owns = async (stubcode: number): Promise<boolean> => {
+  const owns = async (
+    stubcode: number,
+    type: CourseType
+  ): Promise<boolean> => {
     if (!Number.isInteger(stubcode)) return false;
     const { data: stub } = await admin
       .from("stubcodes")
       .select("instructor_id")
       .eq("course_stubcode", stubcode)
+      .eq("course_type", type)
       .maybeSingle();
     if (stub?.instructor_id === user.id) return true;
     const { data: co } = await admin
       .from("stubcode_instructors")
       .select("instructor_id")
       .eq("course_stubcode", stubcode)
+      .eq("course_type", type)
       .eq("instructor_id", user.id)
       .maybeSingle();
     return Boolean(co);
@@ -97,7 +113,10 @@ Deno.serve(async (req) => {
 
   switch (body.action) {
     case "start_enrollment": {
-      if (!(await owns(courseStubcode))) return json({ error: "forbidden" }, 403);
+      if (!courseType) return json({ error: "course_type is required" }, 400);
+      if (!(await owns(courseStubcode, courseType))) {
+        return json({ error: "forbidden" }, 403);
+      }
       if (!room) return json({ error: "terminal is not assigned to a room" }, 409);
 
       const { data: busy } = await admin
@@ -111,6 +130,7 @@ Deno.serve(async (req) => {
         .from("room_modes")
         .select("room")
         .eq("course_stubcode", courseStubcode)
+        .eq("course_type", courseType)
         .maybeSingle();
       if (sectionBusy) {
         return json({ error: "this section already has an open mode" }, 409);
@@ -120,6 +140,7 @@ Deno.serve(async (req) => {
         room,
         mode: "enroll",
         course_stubcode: courseStubcode,
+        course_type: courseType,
         session_id: null,
       });
       if (error) return json({ error: error.message }, 409);
@@ -128,7 +149,10 @@ Deno.serve(async (req) => {
     }
 
     case "start_attendance": {
-      if (!(await owns(courseStubcode))) return json({ error: "forbidden" }, 403);
+      if (!courseType) return json({ error: "course_type is required" }, 400);
+      if (!(await owns(courseStubcode, courseType))) {
+        return json({ error: "forbidden" }, 403);
+      }
       if (!room) return json({ error: "terminal is not assigned to a room" }, 409);
 
       // Prefer today's slot; fall back to the section's earliest one so
@@ -137,6 +161,7 @@ Deno.serve(async (req) => {
         .from("stubcode_schedules")
         .select("stubcode_schedule_id")
         .eq("course_stubcode", courseStubcode)
+        .eq("course_type", courseType)
         .eq("schedule_day", manilaISODay())
         .order("schedule_start")
         .limit(1)
@@ -147,6 +172,7 @@ Deno.serve(async (req) => {
           .from("stubcode_schedules")
           .select("stubcode_schedule_id")
           .eq("course_stubcode", courseStubcode)
+          .eq("course_type", courseType)
           .order("schedule_day")
           .order("schedule_start")
           .limit(1)
@@ -178,6 +204,7 @@ Deno.serve(async (req) => {
           .insert({
             stubcode_schedule_id: slot.stubcode_schedule_id,
             course_stubcode: courseStubcode,
+            course_type: courseType,
             session_date: sessionDate,
           })
           .select("session_id")
@@ -193,6 +220,7 @@ Deno.serve(async (req) => {
           .from("enrollments")
           .select("enrollment_id")
           .eq("course_stubcode", courseStubcode)
+          .eq("course_type", courseType)
           .is("dropped_at", null);
 
         if (enrolled && enrolled.length > 0) {
@@ -201,6 +229,7 @@ Deno.serve(async (req) => {
               session_id: sessionId,
               enrollment_id: row.enrollment_id,
               course_stubcode: courseStubcode,
+              course_type: courseType,
             })),
             { onConflict: "session_id,enrollment_id", ignoreDuplicates: true }
           );
@@ -222,6 +251,7 @@ Deno.serve(async (req) => {
           room,
           mode: "attend",
           course_stubcode: courseStubcode,
+          course_type: courseType,
           session_id: sessionId,
         });
         if (modeError) return json({ error: modeError.message }, 409);
@@ -236,10 +266,16 @@ Deno.serve(async (req) => {
       if (sessionId) {
         const { data: session } = await admin
           .from("class_sessions")
-          .select("course_stubcode")
+          .select("course_stubcode, course_type")
           .eq("session_id", sessionId)
           .maybeSingle();
-        if (session && !(await owns(session.course_stubcode as number))) {
+        if (
+          session &&
+          !(await owns(
+            session.course_stubcode as number,
+            session.course_type as CourseType
+          ))
+        ) {
           return json({ error: "forbidden" }, 403);
         }
 
@@ -256,10 +292,16 @@ Deno.serve(async (req) => {
       if (!room) return json({ error: "nothing to close" }, 409);
       const { data: mode } = await admin
         .from("room_modes")
-        .select("course_stubcode")
+        .select("course_stubcode, course_type")
         .eq("room", room)
         .maybeSingle();
-      if (mode && !(await owns(mode.course_stubcode as number))) {
+      if (
+        mode &&
+        !(await owns(
+          mode.course_stubcode as number,
+          mode.course_type as CourseType
+        ))
+      ) {
         return json({ error: "forbidden" }, 403);
       }
       await admin.from("room_modes").delete().eq("room", room);

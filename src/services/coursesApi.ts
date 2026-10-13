@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Course, CourseType } from "../types/types";
+import type { Course, CourseSection, CourseType } from "../types/types";
 
 // PostgREST row shapes for the room-mode schema. The UI keeps its own
 // display-oriented `Course` view model (see types.ts), so everything
@@ -11,8 +11,8 @@ interface ScheduleRow {
   schedule_end: string;
 }
 
-// A stubcode is now a self-contained section: its own lecture/lab type
-// and its own schedule rows, independent of any sibling section.
+// A section is identified by (course_stubcode, course_type), so the same
+// number can repeat under one course when the types differ.
 interface StubcodeRow {
   course_stubcode: number;
   course_type: CourseType;
@@ -88,6 +88,8 @@ function parseStubcode(stubCode: string): number {
   return value;
 }
 
+const TYPE_NAME: Record<CourseType, string> = { lect: "lecture", lab: "lab" };
+
 export async function fetchCourses(): Promise<Course[]> {
   const [coursesResult, devicesResult] = await Promise.all([
     supabase
@@ -119,12 +121,15 @@ export async function fetchCourses(): Promise<Course[]> {
     const room = schedules[0]?.schedule_room ?? null;
     return {
       courseId: course.course_id,
-      stubs: stubs
-        .map((stub) => String(stub.course_stubcode))
-        .sort((a, b) => a.localeCompare(b)),
-      stubTypes: Object.fromEntries(
-        stubs.map((stub) => [String(stub.course_stubcode), stub.course_type])
-      ),
+      sections: stubs
+        .map((stub) => ({
+          code: String(stub.course_stubcode),
+          type: stub.course_type,
+        }))
+        .sort(
+          (a, b) =>
+            a.code.localeCompare(b.code) || a.type.localeCompare(b.type)
+        ),
       name: course.course_name,
       schedule: formatSchedule(schedules),
       instructor: course.instructors
@@ -189,7 +194,7 @@ export async function upsertDevice(deviceMac: string, roomName: string) {
 // sections. Assigning keeps the `devices` registry in sync, then points
 // each section's schedule slots at the room the terminal lives in.
 export async function assignDevice(
-  stubCodes: string[],
+  sections: CourseSection[],
   deviceMac: string | null,
   roomName: string | null
 ): Promise<void> {
@@ -201,26 +206,29 @@ export async function assignDevice(
     await upsertDevice(deviceMac, roomName);
   }
 
-  const stubs = stubCodes
-    .map((stub) => Number(stub))
-    .filter((stub) => Number.isInteger(stub));
-  if (stubs.length === 0) return;
+  const valid = sections
+    .map((section) => ({ section, code: Number(section.code) }))
+    .filter(({ code }) => Number.isInteger(code));
 
-  const { error } = await supabase
-    .from("stubcode_schedules")
-    .update({ schedule_room: roomName ?? "TBD" })
-    .in("course_stubcode", stubs);
+  for (const { section, code } of valid) {
+    const { error } = await supabase
+      .from("stubcode_schedules")
+      .update({ schedule_room: roomName ?? "TBD" })
+      .eq("course_stubcode", code)
+      .eq("course_type", section.type);
 
-  if (error) throw error;
+    if (error) throw error;
+  }
 }
 
 const UNIQUE_VIOLATION = "23505";
 
-// Writes one schedule row per weekday the section meets. `course_stubcode`
-// is the only link — there is deliberately no course_id, so a section's
-// schedule never bleeds into its siblings.
+// Writes one schedule row per weekday the section meets. The section is
+// (course_stubcode, course_type); there is deliberately no course_id, so
+// one section's schedule never bleeds into its siblings.
 async function insertSchedules(
   stub: number,
+  courseType: CourseType,
   room: string,
   daysOfWeek: string,
   startTime: string,
@@ -234,6 +242,7 @@ async function insertSchedules(
     .insert(
       days.map((day) => ({
         course_stubcode: stub,
+        course_type: courseType,
         schedule_room: room || "TBD",
         schedule_day: day,
         schedule_start: startTime,
@@ -244,11 +253,10 @@ async function insertSchedules(
   if (error) throw error;
 }
 
-// Adds another section to an existing course. The new stubcode is
+// Adds another section to an existing course. The new section is
 // independent: it carries its own lecture/lab type and its own schedule
-// slots rather than inheriting the course's. Stub codes are the
-// registrar's globally unique section number, so a duplicate is reported
-// as a human-readable error instead of a raw Postgres violation.
+// slots. A number may repeat under a course, but only across different
+// types, so a same-type duplicate is reported as a readable error.
 export async function addStubcode(
   courseId: string,
   stubCode: string,
@@ -272,7 +280,9 @@ export async function addStubcode(
 
   if (error) {
     if (error.code === UNIQUE_VIOLATION) {
-      throw new Error(`Stub code "${stub}" is already in use.`);
+      throw new Error(
+        `Stub code "${stub}" already has a ${TYPE_NAME[input.courseType]} section.`
+      );
     }
     throw error;
   }
@@ -280,6 +290,7 @@ export async function addStubcode(
   try {
     await insertSchedules(
       stub,
+      input.courseType,
       input.roomName ?? "",
       input.daysOfWeek,
       input.startTime,
@@ -287,7 +298,11 @@ export async function addStubcode(
     );
   } catch (scheduleError) {
     // Don't leave a section with no schedule behind.
-    await supabase.from("stubcodes").delete().eq("course_stubcode", stub);
+    await supabase
+      .from("stubcodes")
+      .delete()
+      .eq("course_stubcode", stub)
+      .eq("course_type", input.courseType);
     throw scheduleError;
   }
 }
@@ -302,9 +317,9 @@ export async function createCourse(input: NewCourseInput) {
     await upsertDevice(input.deviceMac, input.roomName);
   }
 
-  // A course is now identity only (code + name). Reuse an existing
-  // subject so a lecture and a lab can live as two independent sections
-  // under one course code instead of two near-duplicate course rows.
+  // A course is identity only (code + name). Reuse an existing subject so
+  // a lecture and a lab can live as two independent sections under one
+  // course code instead of two near-duplicate course rows.
   const { data: existing, error: findError } = await supabase
     .from("courses")
     .select("course_id")
@@ -346,13 +361,16 @@ export async function createCourse(input: NewCourseInput) {
       });
     if (stubError) {
       if (stubError.code === UNIQUE_VIOLATION) {
-        throw new Error(`Stub code "${stub}" is already in use.`);
+        throw new Error(
+          `Stub code "${stub}" already has a ${TYPE_NAME[input.courseType]} section.`
+        );
       }
       throw stubError;
     }
 
     await insertSchedules(
       stub,
+      input.courseType,
       input.roomName ?? "",
       input.daysOfWeek,
       input.startTime,
@@ -368,38 +386,43 @@ export async function createCourse(input: NewCourseInput) {
 
 const FOREIGN_KEY_VIOLATION = "23503";
 
-// How many attendance rows sit beneath these stubcodes. Shown in the
+// How many attendance rows sit beneath these sections. Shown in the
 // deletion confirmation so the operator sees exactly what will be
 // dropped before the delete runs.
-export async function countAttendance(stubCodes: string[]): Promise<number> {
-  if (stubCodes.length === 0) return 0;
+export async function countAttendance(
+  sections: CourseSection[]
+): Promise<number> {
+  let total = 0;
+  for (const section of sections) {
+    const code = Number(section.code);
+    if (!Number.isInteger(code)) continue;
+    const { count, error } = await supabase
+      .from("attendance")
+      .select("attendance_id", { count: "exact", head: true })
+      .eq("course_stubcode", code)
+      .eq("course_type", section.type);
 
-  const { count, error } = await supabase
-    .from("attendance")
-    .select("attendance_id", { count: "exact", head: true })
-    .in(
-      "course_stubcode",
-      stubCodes.map((stub) => Number(stub)).filter((n) => Number.isInteger(n))
-    );
-
-  if (error) throw error;
-  return count ?? 0;
+    if (error) throw error;
+    total += count ?? 0;
+  }
+  return total;
 }
 
-// Deletes one stubcode from a course. Everything keyed beneath it —
+// Deletes one section from a course. Everything keyed beneath it —
 // roster, schedules, sessions, room modes, and attendance — goes with it
 // via the FK cascades; the UI confirms the record count first and the
-// course must keep at least one stubcode (enforced in the page).
-export async function deleteStubcode(stubCode: string): Promise<void> {
+// course must keep at least one section (enforced in the page).
+export async function deleteStubcode(section: CourseSection): Promise<void> {
   const { error } = await supabase
     .from("stubcodes")
     .delete()
-    .eq("course_stubcode", Number(stubCode));
+    .eq("course_stubcode", Number(section.code))
+    .eq("course_type", section.type);
 
   if (error) throw error;
 }
 
-// Deletes a course; its stubcodes and everything beneath them cascade.
+// Deletes a course; its sections and everything beneath them cascade.
 export async function deleteCourse(courseId: string): Promise<void> {
   const { error } = await supabase
     .from("courses")

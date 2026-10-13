@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { assignDevice, fetchDevices, type DeviceInfo } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
+import { sectionLabel } from "../../lib/utils/section";
 import type { Course } from "../../types/types";
 
 interface AssignTerminalModalProps {
@@ -49,7 +50,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
 
     setIsSubmitting(true);
     try {
-      await assignDevice(course.stubs, mac || null, room || null);
+      await assignDevice(course.sections, mac || null, room || null);
       onAssigned();
       onClose();
     } catch (err) {
@@ -70,7 +71,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
       >
         <h2 className="text-navy mb-1 text-xl font-bold">Assign Terminal</h2>
         <p className="text-navy/60 mb-4 text-sm">
-          {course.name} ({course.stubs.join(", ")})
+          {course.name} ({course.sections.map(sectionLabel).join(", ")})
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">

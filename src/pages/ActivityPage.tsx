@@ -5,10 +5,12 @@ import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
 import { fetchActivityLog, fetchSessionRoster } from "../services/attendanceApi";
-import type { Activity, StudentStatus } from "../types/types";
+import type { Activity, CourseSection, StudentStatus } from "../types/types";
 
 const ActivityPage = () => {
-  const [selectedStub, setSelectedStub] = useState("");
+  const [selectedSection, setSelectedSection] = useState<CourseSection | null>(
+    null
+  );
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(
     null,
@@ -17,35 +19,35 @@ const ActivityPage = () => {
 
   useEffect(() => {
     setSelectedActivityId(null);
-    if (!selectedStub) {
+    if (!selectedSection) {
       setActivities([]);
       return;
     }
-    fetchActivityLog(selectedStub)
+    fetchActivityLog(selectedSection)
       .then(setActivities)
       .catch(() => setActivities([]));
-  }, [selectedStub]);
+  }, [selectedSection]);
 
   const selectedActivity = activities.find(
     (activity) => activity.id === selectedActivityId,
   );
 
   useEffect(() => {
-    if (!selectedStub || !selectedActivityId) {
+    if (!selectedSection || !selectedActivityId) {
       setStudents([]);
       return;
     }
-    fetchSessionRoster(selectedStub, selectedActivityId)
+    fetchSessionRoster(selectedSection, selectedActivityId)
       .then(setStudents)
       .catch(() => setStudents([]));
-  }, [selectedStub, selectedActivityId]);
+  }, [selectedSection, selectedActivityId]);
 
   return (
     <div className="bg-cream min-h-screen p-6">
       <div className="grid gap-6 lg:grid-cols-[180px_1fr_320px]">
         <section>
           <ActivityFilters
-            onFilterChange={(_, stub) => setSelectedStub(stub ?? "")}
+            onFilterChange={(_, section) => setSelectedSection(section)}
           />
         </section>
         <section>

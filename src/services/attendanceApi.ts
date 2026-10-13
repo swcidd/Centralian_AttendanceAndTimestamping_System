@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Activity, StudentAttendance, StudentStatus } from "../types/types";
+import type { Activity, CourseSection, StudentAttendance, StudentStatus } from "../types/types";
 
 export interface AttendanceLog {
   log_id: string;
@@ -50,15 +50,14 @@ function studentName(student: { student_firstname: string; student_lastname: str
 // Absent until a matching attendance row for `sessionId` says otherwise.
 // Pass sessionId: null when no session is open yet (roster only).
 export async function fetchSessionRoster(
-  stubCode: string,
+  section: CourseSection,
   sessionId: string | null
 ): Promise<StudentStatus[]> {
-  const stub = Number(stubCode);
-
   const { data: enrollments, error: enrollError } = await supabase
     .from("enrollments")
     .select("enrollment_id, dropped_at, students(student_id, student_firstname, student_lastname)")
-    .eq("course_stubcode", stub)
+    .eq("course_stubcode", Number(section.code))
+    .eq("course_type", section.type)
     .is("dropped_at", null)
     .returns<EnrolledRow[]>();
 
@@ -141,13 +140,14 @@ export async function fetchStudentAttendanceRollup(): Promise<StudentAttendance[
 // PRESENT/LATE/ABSENT counts for the ActivityPage log view. Absent is
 // derived as enrolledCount - present - late so a manually-closed session
 // (which never writes absent rows itself) still reports its absences.
-export async function fetchActivityLog(stubCode: string): Promise<Activity[]> {
-  const stub = Number(stubCode);
-
+export async function fetchActivityLog(
+  section: CourseSection
+): Promise<Activity[]> {
   const { data: sessions, error: sessionError } = await supabase
     .from("class_sessions")
     .select("session_id, session_date")
-    .eq("course_stubcode", stub)
+    .eq("course_stubcode", Number(section.code))
+    .eq("course_type", section.type)
     .not("closed_at", "is", null)
     .order("session_date", { ascending: false })
     .returns<Array<{ session_id: string; session_date: string }>>();
@@ -158,7 +158,8 @@ export async function fetchActivityLog(stubCode: string): Promise<Activity[]> {
   const { count: enrolledCount, error: enrollError } = await supabase
     .from("enrollments")
     .select("enrollment_id", { count: "exact", head: true })
-    .eq("course_stubcode", stub)
+    .eq("course_stubcode", Number(section.code))
+    .eq("course_type", section.type)
     .is("dropped_at", null);
 
   if (enrollError) throw enrollError;

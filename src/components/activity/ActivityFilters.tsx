@@ -1,22 +1,27 @@
 import { useEffect, useState } from "react";
 
 import { fetchCourses } from "../../services/coursesApi";
-import type { Course } from "../../types/types";
+import {
+  parseSectionKey,
+  sectionKey,
+  sectionLabel,
+} from "../../lib/utils/section";
+import type { Course, CourseSection } from "../../types/types";
 
 interface ActivityFiltersProps {
-  // Same cascading contract as TrackingFilters: course and stubcode
-  // are emitted together, with the course's first stubcode picked
+  // Same cascading contract as TrackingFilters: course and section are
+  // emitted together, with the course's first section picked
   // automatically on course selection.
-  onFilterChange: (course: Course | null, stub: string | null) => void;
+  onFilterChange: (course: Course | null, section: CourseSection | null) => void;
 }
 
-// Course -> Stubcode cascade (a course owns many stubcodes). Until a
-// course is chosen the stub dropdown is disabled and empty — no more
+// Course -> Section cascade (a course owns many sections). Until a
+// course is chosen the section dropdown is disabled and empty — no more
 // two dropdowns listing the same courses side by side.
 const ActivityFilters = ({ onFilterChange }: ActivityFiltersProps) => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedStub, setSelectedStub] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
 
   useEffect(() => {
     fetchCourses()
@@ -30,15 +35,15 @@ const ActivityFilters = ({ onFilterChange }: ActivityFiltersProps) => {
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const course =
       courses.find((c) => c.courseId === e.target.value) ?? null;
-    const stub = course?.stubs[0] ?? null;
+    const section = course?.sections[0] ?? null;
     setSelectedCourseId(e.target.value);
-    setSelectedStub(stub ?? "");
-    onFilterChange(course, stub);
+    setSelectedSection(section ? sectionKey(section) : "");
+    onFilterChange(course, section);
   };
 
-  const handleStubChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedStub(e.target.value);
-    onFilterChange(selectedCourse, e.target.value || null);
+  const handleSectionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSection(e.target.value);
+    onFilterChange(selectedCourse, parseSectionKey(e.target.value));
   };
 
   const selectClass =
@@ -61,17 +66,17 @@ const ActivityFilters = ({ onFilterChange }: ActivityFiltersProps) => {
         ))}
       </select>
       <select
-        value={selectedStub}
-        onChange={handleStubChange}
+        value={selectedSection}
+        onChange={handleSectionChange}
         disabled={!selectedCourse}
         className={selectClass}
       >
         <option value="" disabled>
           Stub Code
         </option>
-        {(selectedCourse?.stubs ?? []).map((stub) => (
-          <option key={stub} value={stub}>
-            {stub}
+        {(selectedCourse?.sections ?? []).map((section) => (
+          <option key={sectionKey(section)} value={sectionKey(section)}>
+            {sectionLabel(section)}
           </option>
         ))}
       </select>

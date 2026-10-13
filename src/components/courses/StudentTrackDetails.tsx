@@ -1,15 +1,28 @@
+import { useEffect } from "react";
+
 type StudentTrackDetailsProps = {
   name: string;
   onClose: () => void;
 };
 
 const StudentTrackDetails = ({ name, onClose }: StudentTrackDetailsProps) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div
       className="bg-navy/40 fixed inset-0 z-50 flex items-center justify-center"
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Student attendance details"
         className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -56,6 +69,7 @@ const StudentTrackDetails = ({ name, onClose }: StudentTrackDetailsProps) => {
           </select>
 
           <button
+            type="button"
             onClick={onClose}
             className="border-tan text-navy hover:bg-tan mt-4 w-full rounded-xl border bg-white px-4 py-3 font-medium transition"
           >

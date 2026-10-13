@@ -25,6 +25,14 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
     fetchDevices()
       .then(setDevices)
       // Non-fatal: the modal still works with typed MACs.
@@ -65,6 +73,9 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Assign Terminal"
         className="animate-scale-in w-full max-w-md rounded-2xl bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >

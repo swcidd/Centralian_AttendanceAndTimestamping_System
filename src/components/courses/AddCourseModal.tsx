@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createCourse } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
 
@@ -13,6 +13,14 @@ const inputClass =
 const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -54,6 +62,9 @@ const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add Course"
         className="animate-scale-in w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >

@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CgProfile } from "react-icons/cg";
 
-import {
-  ENCODER_API_URL,
-  encodeCard,
-  fetchEncoderHealth,
-  type EncodeCardResult,
-} from "../services/cardEncoderApi";
+import { ENCODER_API_URL, encodeCard, fetchEncoderHealth, type EncodeCardResult } from "../services/cardEncoderApi";
 
 type Health = "checking" | "online" | "offline";
 type Phase = "idle" | "waiting" | "success" | "error";
@@ -70,11 +65,17 @@ const EncodeCardPage = () => {
     setResult(null);
     setPhase("waiting");
     try {
-      const response = await encodeCard({
-        schoolId: schoolId.trim(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-      });
+      // skipServer=true: the student will be created when the card is tapped
+      // in the system via the ingest-tap flow, so no local Python server needed.
+      const response = await encodeCard(
+        {
+          schoolId: schoolId.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        },
+        75_000,
+        true
+      );
       setResult(response);
       setPhase(response.ok ? "success" : "error");
       if (!response.ok) setError(response.error ?? "Encoding failed.");
@@ -136,10 +137,11 @@ const EncodeCardPage = () => {
           <h2 className="text-navy text-center text-lg font-bold">Encode Student Card</h2>
           <p className="text-navy/60 mt-1 text-center text-sm">
             Writes student JSON to the next MIFARE card tapped on the
-            computer running the local encoder.
+            reader. The student record is created automatically when the card
+            is tapped in the system.
           </p>
 
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+          <div className="mb-4 flex justify-center">
             <span
               className={`inline-block h-2 w-2 rounded-full ${
                 health === "online"
@@ -151,29 +153,12 @@ const EncodeCardPage = () => {
             />
             <span className="text-navy/60">
               {health === "online"
-                ? "Local encoder connected"
+                ? "Encoder connected"
                 : health === "offline"
-                  ? "Local encoder not reachable"
-                  : "Checking local encoder..."}
+                  ? "Encoder not reachable"
+                  : "Checking encoder..."}
             </span>
-            {health !== "checking" && (
-              <button
-                type="button"
-                onClick={checkHealth}
-                className="text-orange font-medium hover:underline"
-              >
-                Recheck
-              </button>
-            )}
           </div>
-
-          {health === "offline" && (
-            <div className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Start it with{" "}
-              <code className="font-mono">python3 tools/encoder_server.py</code>{" "}
-              on the machine with the USB NFC reader (expected at {ENCODER_API_URL}).
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             {error && (

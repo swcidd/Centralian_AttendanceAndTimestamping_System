@@ -29,7 +29,3 @@ String hmacSha256Hex(const String &message) {
 String signPayload(const String &deviceMac, unsigned long timestamp, const String &nfcUid) {
   return hmacSha256Hex(deviceMac + String(timestamp) + nfcUid);
 }
-
-String signDeviceMessage(const String &deviceMac, unsigned long timestamp) {
-  return hmacSha256Hex(deviceMac + String(timestamp));
-}

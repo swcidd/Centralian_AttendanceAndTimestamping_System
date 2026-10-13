@@ -87,7 +87,7 @@ const TrackingPage = () => {
           event: "INSERT",
           schema: "public",
           table: "enrollments",
-          filter: `stub_code=eq.${selectedStub}`,
+          filter: `course_stubcode=eq.${selectedStub}`,
         },
         () => loadRoster()
       )

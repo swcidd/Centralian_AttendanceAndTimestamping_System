@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CgProfile } from "react-icons/cg";
 
-import { ENCODER_API_URL, encodeCard, fetchEncoderHealth, type EncodeCardResult } from "../services/cardEncoderApi";
+import { encodeCard, fetchEncoderHealth, type EncodeCardResult } from "../services/cardEncoderApi";
 
 type Health = "checking" | "online" | "offline";
 type Phase = "idle" | "waiting" | "success" | "error";
@@ -43,15 +42,11 @@ const EncodeCardPage = () => {
     void runHealthCheck();
   }, []);
 
-  const checkHealth = () => {
-    setHealth("checking");
-    void runHealthCheck();
-  };
-
   const bytes = payloadBytes(schoolId, firstName, lastName);
   const tooLarge = bytes > MAX_PAYLOAD_BYTES;
+  // The reader is addressed directly (skipServer), so a failed health
+  // probe does not block the write — it only disables the status dot.
   const canSubmit =
-    health === "online" &&
     phase !== "waiting" &&
     schoolId.trim() !== "" &&
     firstName.trim() !== "" &&
@@ -84,7 +79,7 @@ const EncodeCardPage = () => {
       setError(
         err instanceof Error && err.name === "AbortError"
           ? "Timed out waiting for a card. Try again and tap the card promptly."
-          : "Could not reach the local encoder. Is tools/encoder_server.py running?"
+          : "Could not reach the card reader. Check that the ESP32/PN532 is powered and on the same network."
       );
     }
   };
@@ -131,7 +126,11 @@ const EncodeCardPage = () => {
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="border-tan w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
           <div className="mb-4 flex justify-center">
-            <CgProfile className="text-navy/70 text-7xl" />
+            <img
+              src="/assets/logo/cdnlogo.com_central-philippine-university-logo.svg"
+              alt="Central Philippine University Logo"
+              className="w-20 h-20 float"
+            />
           </div>
 
           <h2 className="text-navy text-center text-lg font-bold">Encode Student Card</h2>

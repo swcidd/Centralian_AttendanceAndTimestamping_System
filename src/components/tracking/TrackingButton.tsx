@@ -35,7 +35,7 @@ const TrackingButton = ({
 
     try {
       if (activeSession) {
-        await closeSession(activeSession.sessionId);
+        await closeSession(activeSession.sessionId, activeSession.deviceMac);
         onSessionChange(null);
       } else {
         if (!course.deviceMac) {

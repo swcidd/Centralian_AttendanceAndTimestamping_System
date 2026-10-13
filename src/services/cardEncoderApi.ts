@@ -50,12 +50,21 @@ export async function fetchEncoderHealth(
   }
 }
 
-// Long timeout: the server blocks until a card is tapped on the reader
-// (its own default is 60s; allow a little slack for the round trip).
+// Long timeout: the reader blocks until a card is tapped on it (the
+// local bridge's own default is 60s; allow a little slack for the round
+// trip).
+//
+// skipServer: write straight to the reader instead of routing through
+// the local bridge. The endpoint is the same (`VITE_ENCODER_URL`), so
+// pointing it at the ESP32/PN532 removes the need to run
+// tools/encoder_server.py at all; this flag only tells the caller not to
+// gate the write on a separate health probe.
 export async function encodeCard(
   input: EncodeCardInput,
-  timeoutMs = 75_000
+  timeoutMs = 75_000,
+  skipServer = false
 ): Promise<EncodeCardResult> {
+  void skipServer;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

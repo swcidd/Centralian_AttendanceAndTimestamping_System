@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include "commands.h"
 #include "config.h"
 #include "crypto.h"
 #include "led.h"
@@ -8,12 +7,6 @@
 #include "nfc.h"
 #include "time_sync.h"
 #include "validation.h"
-
-// File scope (not inside the anonymous namespace below) so it has
-// external linkage — commands.h declares it extern, letting the
-// command handler in commands.cpp flip it on START_REGISTRATION /
-// off on START_ATTENDANCE and END_SESSION.
-bool registrationMode = false;
 
 namespace {
 const unsigned long WIFI_TIMEOUT_MS = 20000;
@@ -123,8 +116,6 @@ void setup() {
 }
 
 void loop() {
-  pollDeviceCommandsIfDue();
-
   // Check serial for WRITE command: WRITE|school_id|first_name|last_name
   if (Serial.available()) {
     String line = Serial.readStringUntil('\n');
@@ -173,34 +164,11 @@ void loop() {
     return;
   }
 
-  if (registrationMode) {
-    CardData card = nfcReadData();
-    if (card.uid.length() == 0) return;
-    if (!card.valid) {
-      Serial.println("Registration card unreadable or malformed");
-      ledIndicateInvalidUid();
-      return;
-    }
-
-    unsigned long now = millis();
-    if (card.uid == lastUid && (now - lastTapMillis) < TAP_DEBOUNCE_MS) {
-      return;
-    }
-    lastUid = card.uid;
-    lastTapMillis = now;
-
-    unsigned long timestamp = timeSyncNowUtc();
-    String deviceMac = WiFi.macAddress();
-    String signature = signPayload(deviceMac, timestamp, card.uid);
-
-    int statusCode = postTapEvent(deviceMac, timestamp, card.uid, signature, card.schoolId,
-                                  card.firstName, card.lastName);
-    printTapHeader("REGISTER");
-    printCardData(card, timestamp, deviceMac, signature, statusCode);
-    ledIndicateResult(statusCode);
-    return;
-  }
-
+  // The terminal no longer needs to know whether it is in attendance or
+  // registration mode. The room's mode lives server-side (room_modes) and
+  // every tap posts the same signed payload: a readable card carries
+  // student_info (so a first tap can enrol), a bare UID is resolved — or
+  // rejected — against the room's current mode by ingest-tap.
   CardData card = nfcReadData();
   if (card.uid.length() == 0) {
     lastUid = "";
@@ -233,7 +201,7 @@ void loop() {
   } else {
     statusCode = postTapEvent(deviceMac, timestamp, uid, signature);
   }
-  printTapHeader("ATTENDANCE");
+  printTapHeader("TAP");
   printCardData(card, timestamp, deviceMac, signature, statusCode);
   ledIndicateResult(statusCode);
 }

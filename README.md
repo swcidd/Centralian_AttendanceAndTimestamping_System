@@ -131,12 +131,23 @@ cp firmware/include/config.h.example firmware/include/config.h
 
 ## Card Encoding
 
-Student cards are provisioned **before** they're ever tapped on a terminal, using `tools/encode_card.py` on a desktop with a USB NFC reader (ACR122U or PN532). It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1–7 (blocks 4–30, excluding trailers) with the factory-default key — 336 bytes total.
+Cards are provisioned from the dashboard's **Encode Card** page. It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1–7 (blocks 4–30, excluding trailers) with the factory-default key — 336 bytes total.
 
-See **[`docs/card-encoding.md`](docs/card-encoding.md)** for the full layout, hardware requirements, and single/bulk encoding instructions.
+The page talks over HTTP to a reader exposing `GET /health` and `POST /encode`. Two deployments satisfy that:
+
+| Target | `VITE_ENCODER_URL` | Notes |
+|---|---|---|
+| **ESP32 terminal** (recommended) | `http://<device-ip>:8787` | The terminal serves both endpoints itself (`firmware/src/encode_server.cpp`); nothing runs on the desktop. Its IP is printed to Serial at boot. |
+| PC + USB reader | `http://localhost:8787` (default) | `python tools/encoder_server.py` |
+
+Because the Pages site is HTTPS and the reader is on the private LAN, the reader must answer the CORS preflight with `Access-Control-Allow-Private-Network: true` — both implementations do.
+
+The student record itself is created on the **first tap** of the encoded card while the room is in `enroll` mode (see *How a Tap Flows*), so no separate registration step is needed.
+
+See **[`docs/card-encoding.md`](docs/card-encoding.md)** for the full on-card layout and hardware requirements.
 
 ```bash
-pip install nfcpy
+pip install nfcpy   # only needed for the PC + USB reader path
 python tools/encode_card.py --school-id 25-1809-52 --first-name "Doe" --last-name "Jane"
 ```
 

@@ -11,3 +11,8 @@
 #define DEVICE_PSK "replace-with-shared-secret"
 
 #define API_ENDPOINT_URL "https://your-project.functions.supabase.co/ingest-tap"
+
+// Port the terminal's own HTTP encode server listens on. The dashboard's
+// Encode Card page talks to http://<device-ip>:<this-port>/encode, so the
+// desktop bridge (tools/encoder_server.py) is not needed.
+#define ENCODER_HTTP_PORT 8787

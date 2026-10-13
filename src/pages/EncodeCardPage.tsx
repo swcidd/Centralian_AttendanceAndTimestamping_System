@@ -152,10 +152,10 @@ const EncodeCardPage = () => {
             />
             <span className="text-navy/60">
               {health === "online"
-                ? "Encoder connected"
+                ? "Reader connected"
                 : health === "offline"
-                  ? "Encoder not reachable"
-                  : "Checking encoder..."}
+                  ? "Reader not reachable"
+                  : "Checking reader..."}
             </span>
           </div>
 

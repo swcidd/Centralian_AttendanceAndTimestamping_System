@@ -1,6 +1,14 @@
-// Talks to the local card-encoder bridge (tools/encoder_server.py).
-// This is a purely local loopback tool: it needs no Supabase session,
-// so the Encode Card page works signed in or out.
+// Talks to the card reader over HTTP. The reader is normally the ESP32
+// terminal itself (it serves /health and /encode — see
+// firmware/src/encode_server.cpp), so nothing has to be running on the
+// desktop; point VITE_ENCODER_URL at the device.
+//
+// tools/encoder_server.py still implements the same two endpoints for
+// bench work on a PC with a USB reader, and remains the default so an
+// existing setup keeps working unchanged.
+//
+// This is a purely local/LAN tool: it needs no Supabase session, so the
+// Encode Card page works signed in or out.
 
 const DEFAULT_ENCODER_URL = "http://localhost:8787";
 

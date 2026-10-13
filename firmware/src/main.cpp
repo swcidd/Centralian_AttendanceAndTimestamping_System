@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include "config.h"
 #include "crypto.h"
+#include "encode_server.h"
 #include "led.h"
 #include "net.h"
 #include "nfc.h"
@@ -113,9 +114,15 @@ void setup() {
   WiFi.setTxPower(WIFI_POWER_5dBm);
 
   timeSyncBegin();
+
+  // The dashboard's Encode Card page writes cards by POSTing to this
+  // device directly, so no desktop bridge has to be running.
+  encodeServerBegin();
 }
 
 void loop() {
+  encodeServerHandle();
+
   // Check serial for WRITE command: WRITE|school_id|first_name|last_name
   if (Serial.available()) {
     String line = Serial.readStringUntil('\n');

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { addStubcode } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
-import type { Course } from "../../types/types";
+import type { Course, CourseType } from "../../types/types";
 
 interface AddStubcodeModalProps {
   course: Course;
@@ -12,8 +12,9 @@ interface AddStubcodeModalProps {
 const inputClass =
   "border-tan text-navy focus:border-orange focus:ring-orange/20 w-full rounded-lg border bg-white px-4 py-2.5 text-sm outline-none focus:ring-2";
 
-// Adds another stubcode to an existing course — the Course 1:N
-// Stubcode side of the model. Same shape as AddCourseModal.
+// Adds another independent section to an existing course. The section gets
+// its own class type and its own schedule/terminal — it does NOT inherit
+// the course's, unlike the previous shared-schedule behaviour.
 const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -22,12 +23,27 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
     e.preventDefault();
     setError(null);
 
-    const stubCode = (new FormData(e.currentTarget).get("stubCode") as string).trim();
+    const formData = new FormData(e.currentTarget);
+    const stubCode = (formData.get("stubCode") as string).trim();
     if (!stubCode) return;
+
+    const deviceMac = (formData.get("deviceMac") as string).trim().toUpperCase();
+    const roomName = (formData.get("roomName") as string).trim();
+    if (deviceMac && !roomName) {
+      setError("Room name is required when assigning a device.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      await addStubcode(course.courseId, stubCode);
+      await addStubcode(course.courseId, stubCode, {
+        courseType: formData.get("courseType") as CourseType,
+        startTime: formData.get("startTime") as string,
+        endTime: formData.get("endTime") as string,
+        daysOfWeek: formData.get("daysOfWeek") as string,
+        deviceMac: deviceMac || null,
+        roomName: roomName || null,
+      });
       onAdded();
       onClose();
     } catch (err) {
@@ -43,13 +59,13 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
       onClick={onClose}
     >
       <div
-        className="animate-scale-in w-full max-w-md rounded-2xl bg-white p-6 shadow-lg"
+        className="animate-scale-in w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-navy mb-1 text-xl font-bold">Add Stubcode</h2>
         <p className="text-navy/60 mb-4 text-sm">
-          New stubcode for <span className="font-medium">{course.name}</span> —
-          it shares this course's schedule, terminal, and thresholds.
+          New section for <span className="font-medium">{course.name}</span> —
+          it carries its own class type, schedule, and terminal.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -59,14 +75,56 @@ const AddStubcodeModal = ({ course, onClose, onAdded }: AddStubcodeModalProps) =
             </p>
           )}
 
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              name="stubCode"
+              required
+              placeholder="Stub Code (e.g. CS101-B)"
+              className={inputClass}
+              autoFocus
+            />
+            <select
+              name="courseType"
+              defaultValue="lect"
+              aria-label="Class type"
+              className={inputClass}
+            >
+              <option value="lect">Lecture</option>
+              <option value="lab">Laboratory</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <input type="time" name="startTime" required className={inputClass} />
+            <input type="time" name="endTime" required className={inputClass} />
+          </div>
+
           <input
             type="text"
-            name="stubCode"
+            name="daysOfWeek"
             required
-            placeholder="Stub Code (e.g. CS101-B)"
+            placeholder="Days (e.g. MWF)"
             className={inputClass}
-            autoFocus
           />
+
+          <p className="text-navy/60 pt-2 text-xs font-medium">
+            Terminal (optional — can be assigned later)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              name="deviceMac"
+              placeholder="Device MAC"
+              className={inputClass}
+            />
+            <input
+              type="text"
+              name="roomName"
+              placeholder="Room Name"
+              className={inputClass}
+            />
+          </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button

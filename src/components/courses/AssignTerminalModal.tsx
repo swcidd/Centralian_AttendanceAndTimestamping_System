@@ -49,7 +49,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
 
     setIsSubmitting(true);
     try {
-      await assignDevice(course.courseId, mac || null, room || null);
+      await assignDevice(course.stubs, mac || null, room || null);
       onAssigned();
       onClose();
     } catch (err) {

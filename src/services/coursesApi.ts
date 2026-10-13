@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Course } from "../types/types";
+import type { Course, CourseType } from "../types/types";
 
 // PostgREST row shapes for the room-mode schema. The UI keeps its own
 // display-oriented `Course` view model (see types.ts), so everything
@@ -11,13 +11,19 @@ interface ScheduleRow {
   schedule_end: string;
 }
 
+// A stubcode is now a self-contained section: its own lecture/lab type
+// and its own schedule rows, independent of any sibling section.
+interface StubcodeRow {
+  course_stubcode: number;
+  course_type: CourseType;
+  stubcode_schedules: ScheduleRow[] | null;
+}
+
 interface CourseRow {
   course_id: string;
   course_code: string;
   course_name: string;
-  course_type: "lect" | "lab";
-  stubcodes: Array<{ course_stubcode: number }> | null;
-  stubcode_schedules: ScheduleRow[] | null;
+  stubcodes: StubcodeRow[] | null;
   instructors: { first_name: string; last_name: string } | null;
 }
 
@@ -87,7 +93,7 @@ export async function fetchCourses(): Promise<Course[]> {
     supabase
       .from("courses")
       .select(
-        "course_id, course_code, course_name, course_type, stubcodes(course_stubcode), stubcode_schedules(schedule_room, schedule_day, schedule_start, schedule_end), instructors(first_name, last_name)"
+        "course_id, course_code, course_name, stubcodes(course_stubcode, course_type, stubcode_schedules(schedule_room, schedule_day, schedule_start, schedule_end)), instructors(first_name, last_name)"
       )
       .returns<CourseRow[]>(),
     supabase.from("devices").select("device_id, room"),
@@ -107,13 +113,18 @@ export async function fetchCourses(): Promise<Course[]> {
   }
 
   return (coursesResult.data ?? []).map((course) => {
-    const schedules = course.stubcode_schedules ?? [];
+    const stubs = course.stubcodes ?? [];
+    // The card aggregates every section's slots into one display line.
+    const schedules = stubs.flatMap((stub) => stub.stubcode_schedules ?? []);
     const room = schedules[0]?.schedule_room ?? null;
     return {
       courseId: course.course_id,
-      stubs: (course.stubcodes ?? [])
+      stubs: stubs
         .map((stub) => String(stub.course_stubcode))
         .sort((a, b) => a.localeCompare(b)),
+      stubTypes: Object.fromEntries(
+        stubs.map((stub) => [String(stub.course_stubcode), stub.course_type])
+      ),
       name: course.course_name,
       schedule: formatSchedule(schedules),
       instructor: course.instructors
@@ -147,6 +158,18 @@ export interface NewCourseInput {
   stubCode: string;
   subjectCode: string;
   courseName: string;
+  courseType: CourseType;
+  startTime: string;
+  endTime: string;
+  daysOfWeek: string;
+  deviceMac: string | null;
+  roomName: string | null;
+}
+
+// The fields a single section carries. Used both for a course's first
+// section (inside NewCourseInput) and for sections added later.
+export interface SectionInput {
+  courseType: CourseType;
   startTime: string;
   endTime: string;
   daysOfWeek: string;
@@ -162,11 +185,11 @@ export async function upsertDevice(deviceMac: string, roomName: string) {
   if (error) throw error;
 }
 
-// Assign (or unassign, when deviceMac is null) a terminal to an
-// existing course. Assigning keeps the `devices` registry in sync, then
-// points the course's schedule slots at the room the terminal lives in.
+// Assign (or unassign, when deviceMac is null) a terminal to a course's
+// sections. Assigning keeps the `devices` registry in sync, then points
+// each section's schedule slots at the room the terminal lives in.
 export async function assignDevice(
-  courseId: string,
+  stubCodes: string[],
   deviceMac: string | null,
   roomName: string | null
 ): Promise<void> {
@@ -178,26 +201,65 @@ export async function assignDevice(
     await upsertDevice(deviceMac, roomName);
   }
 
+  const stubs = stubCodes
+    .map((stub) => Number(stub))
+    .filter((stub) => Number.isInteger(stub));
+  if (stubs.length === 0) return;
+
   const { error } = await supabase
     .from("stubcode_schedules")
     .update({ schedule_room: roomName ?? "TBD" })
-    .eq("course_id", courseId);
+    .in("course_stubcode", stubs);
 
   if (error) throw error;
 }
 
 const UNIQUE_VIOLATION = "23505";
 
-// Adds another stubcode to an existing course (Course 1:N Stubcode).
-// Stub codes are the registrar's globally unique section number, so a
-// duplicate is reported as a human-readable error instead of a raw
-// Postgres violation.
+// Writes one schedule row per weekday the section meets. `course_stubcode`
+// is the only link — there is deliberately no course_id, so a section's
+// schedule never bleeds into its siblings.
+async function insertSchedules(
+  stub: number,
+  room: string,
+  daysOfWeek: string,
+  startTime: string,
+  endTime: string
+) {
+  const days = parseDays(daysOfWeek);
+  if (days.length === 0) return;
+
+  const { error } = await supabase
+    .from("stubcode_schedules")
+    .insert(
+      days.map((day) => ({
+        course_stubcode: stub,
+        schedule_room: room || "TBD",
+        schedule_day: day,
+        schedule_start: startTime,
+        schedule_end: endTime,
+      }))
+    );
+
+  if (error) throw error;
+}
+
+// Adds another section to an existing course. The new stubcode is
+// independent: it carries its own lecture/lab type and its own schedule
+// slots rather than inheriting the course's. Stub codes are the
+// registrar's globally unique section number, so a duplicate is reported
+// as a human-readable error instead of a raw Postgres violation.
 export async function addStubcode(
   courseId: string,
-  stubCode: string
+  stubCode: string,
+  input: SectionInput
 ): Promise<void> {
   const stub = parseStubcode(stubCode);
   const { data: userData } = await supabase.auth.getUser();
+
+  if (input.deviceMac && input.roomName) {
+    await upsertDevice(input.deviceMac, input.roomName);
+  }
 
   const { error } = await supabase
     .from("stubcodes")
@@ -205,6 +267,7 @@ export async function addStubcode(
       course_stubcode: stub,
       course_id: courseId,
       instructor_id: userData.user?.id ?? null,
+      course_type: input.courseType,
     });
 
   if (error) {
@@ -212,6 +275,20 @@ export async function addStubcode(
       throw new Error(`Stub code "${stub}" is already in use.`);
     }
     throw error;
+  }
+
+  try {
+    await insertSchedules(
+      stub,
+      input.roomName ?? "",
+      input.daysOfWeek,
+      input.startTime,
+      input.endTime
+    );
+  } catch (scheduleError) {
+    // Don't leave a section with no schedule behind.
+    await supabase.from("stubcodes").delete().eq("course_stubcode", stub);
+    throw scheduleError;
   }
 }
 
@@ -225,30 +302,47 @@ export async function createCourse(input: NewCourseInput) {
     await upsertDevice(input.deviceMac, input.roomName);
   }
 
-  const { data: course, error } = await supabase
+  // A course is now identity only (code + name). Reuse an existing
+  // subject so a lecture and a lab can live as two independent sections
+  // under one course code instead of two near-duplicate course rows.
+  const { data: existing, error: findError } = await supabase
     .from("courses")
-    .insert({
-      course_code: input.subjectCode,
-      course_name: input.courseName,
-      course_type: "lect",
-      created_by: userData.user?.id ?? null,
-    })
     .select("course_id")
-    .single();
+    .eq("course_code", input.subjectCode)
+    .maybeSingle();
+  if (findError) throw findError;
 
-  if (error) throw error;
+  let courseId: string | null = existing?.course_id ?? null;
+  let createdCourse = false;
 
-  // The form's stub code becomes the course's first section, and its
-  // "MWF, 08:00 - 09:00" becomes one schedule row per weekday. If any of
-  // that fails, remove the course again rather than leave a half-built
-  // course behind.
+  if (!courseId) {
+    const { data: course, error } = await supabase
+      .from("courses")
+      .insert({
+        course_code: input.subjectCode,
+        course_name: input.courseName,
+        created_by: userData.user?.id ?? null,
+      })
+      .select("course_id")
+      .single();
+
+    if (error) throw error;
+    courseId = course.course_id;
+    createdCourse = true;
+  }
+
+  // The form's stub code becomes the course's first section, with its own
+  // type; its "MWF, 08:00 - 09:00" becomes one schedule row per weekday.
+  // If any of that fails, remove a course we just created rather than
+  // leave a half-built course behind.
   try {
     const { error: stubError } = await supabase
       .from("stubcodes")
       .insert({
         course_stubcode: stub,
-        course_id: course.course_id,
+        course_id: courseId,
         instructor_id: userData.user?.id ?? null,
+        course_type: input.courseType,
       });
     if (stubError) {
       if (stubError.code === UNIQUE_VIOLATION) {
@@ -257,24 +351,17 @@ export async function createCourse(input: NewCourseInput) {
       throw stubError;
     }
 
-    const days = parseDays(input.daysOfWeek);
-    if (days.length > 0) {
-      const { error: scheduleError } = await supabase
-        .from("stubcode_schedules")
-        .insert(
-          days.map((day) => ({
-            course_id: course.course_id,
-            course_stubcode: stub,
-            schedule_room: input.roomName || "TBD",
-            schedule_day: day,
-            schedule_start: input.startTime,
-            schedule_end: input.endTime,
-          }))
-        );
-      if (scheduleError) throw scheduleError;
-    }
+    await insertSchedules(
+      stub,
+      input.roomName ?? "",
+      input.daysOfWeek,
+      input.startTime,
+      input.endTime
+    );
   } catch (buildError) {
-    await supabase.from("courses").delete().eq("course_id", course.course_id);
+    if (createdCourse && courseId) {
+      await supabase.from("courses").delete().eq("course_id", courseId);
+    }
     throw buildError;
   }
 }

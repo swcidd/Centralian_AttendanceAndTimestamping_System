@@ -24,6 +24,7 @@ const CourseGrid = ({
         <CourseCard
           key={course.courseId}
           stubs={course.stubs}
+          stubTypes={course.stubTypes}
           name={course.name}
           schedule={course.schedule}
           instructor={course.instructor}

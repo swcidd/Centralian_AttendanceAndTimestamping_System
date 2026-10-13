@@ -1,7 +1,9 @@
 import { CgClose } from "react-icons/cg";
+import type { CourseType } from "../../types/types";
 
 interface CourseCardProps {
   stubs: string[];
+  stubTypes: Record<string, CourseType>;
   name: string;
   schedule: string;
   instructor: string;
@@ -13,8 +15,14 @@ interface CourseCardProps {
   onDelete: () => void;
 }
 
+const TYPE_LABEL: Record<CourseType, string> = {
+  lect: "Lecture",
+  lab: "Laboratory",
+};
+
 const CourseCard = ({
   stubs,
+  stubTypes,
   name,
   schedule,
   instructor,
@@ -33,9 +41,15 @@ const CourseCard = ({
           {stubs.map((stub) => (
             <span
               key={stub}
+              title={stubTypes[stub] ? TYPE_LABEL[stubTypes[stub]] : undefined}
               className="bg-orange/10 text-orange inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs font-medium"
             >
               {stub}
+              {stubTypes[stub] && (
+                <span className="text-orange/70 font-sans text-[10px] font-semibold uppercase">
+                  {stubTypes[stub]}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => onDeleteStub(stub)}

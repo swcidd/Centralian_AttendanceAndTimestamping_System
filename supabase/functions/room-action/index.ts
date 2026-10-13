@@ -20,10 +20,24 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+// The dashboard calls this from the browser, which always sends a CORS
+// preflight (OPTIONS) before the POST. The gateway answers that preflight
+// with a 401 (verify_jwt is on) and, crucially, without the access-control-*
+// headers the browser requires, so the real request never leaves the page
+// and supabase-js reports "Failed to send a request to the Edge Function".
+// Answer the preflight ourselves and tag every response.
+const CORS_HEADERS: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers":
+    "authorization, x-client-info, apikey, content-type",
+  "access-control-max-age": "86400",
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
 }
 
@@ -52,6 +66,10 @@ interface RequestBody {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;

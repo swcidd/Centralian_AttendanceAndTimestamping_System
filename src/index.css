@@ -7,27 +7,98 @@
   --color-white: #ffffff;
   --color-tan: #e5dbca;
 
-  --animate-fade-in: fade-in 0.2s ease-out;
-  --animate-scale-in: scale-in 0.2s ease-out;
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-scale-in: scale-in 0.3s ease-out;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-spin-slow: spin 4s linear infinite;
+  --animate-bounce-slow: bounce 2s ease-in-out infinite;
+  --animate-wave: wave 3s ease-in-out infinite;
 }
 
 @keyframes fade-in {
   from {
     opacity: 0;
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.95);
   }
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.8, 0, 0.2, 1);
+  }
+  50% {
+    transform: translateY(-25px);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+@keyframes wave {
+  0% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(14deg);
+  }
+  30% {
+    transform: rotate(-8deg);
+  }
+  45% {
+    transform: rotate(14deg);
+  }
+  60% {
+    transform: rotate(-4deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+  90% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 
@@ -41,7 +112,49 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: #f4efe6;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
+
+/* Entrance animation for page load */
+.page-enter {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.page-scale-enter {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+/* Floating effect for decorative elements */
+.floating {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Slow spinning effect */
+.spin-slow {
+  animation: spin 4s linear infinite;
+}
+
+/* Slow bounce effect */
+.bounce-slow {
+  animation: bounce 2s ease-in-out infinite;
+}
+
+/* Wave animation */
+.wave-animation {
+  animation: wave 3s ease-in-out infinite;
+}
+
+/* Pulse slow effect */
+.pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+/* Stagger children delay */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
 
 /* Baseline easing for interactive elements — most buttons/links/inputs
    in this app change color, border, shadow, or scale on hover/active/

@@ -17,7 +17,15 @@ const StudentTrackRow = ({
 }: StudentTrackRowProps) => {
   return (
     <tr
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      aria-label={`View attendance for ${studentName}`}
       className="border-tan hover:bg-cream cursor-pointer border-b transition-colors last:border-b-0"
     >
       <td className="text-navy/70 px-4 py-3 text-sm">{studentId}</td>

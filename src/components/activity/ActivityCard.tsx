@@ -17,7 +17,15 @@ const ActivityCard = ({
 }: ActivityCardProps) => {
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick(id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(id);
+        }
+      }}
       className="border-tan w-full cursor-pointer rounded-xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"
     >
       <div className="flex flex-col gap-4">

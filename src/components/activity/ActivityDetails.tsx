@@ -7,7 +7,7 @@ interface ActivityDetailsProps {
 
 const ActivityDetails = ({ date, students }: ActivityDetailsProps) => {
   return (
-    <div className="overflow-hiden border-tan rounded-xl border bg-white shadow-sm">
+    <div className="overflow-hidden border-tan rounded-xl border bg-white shadow-sm">
       <h2 className="text-navy p-5 text-xl font-bold">{date}</h2>
 
       <table className="w-full">

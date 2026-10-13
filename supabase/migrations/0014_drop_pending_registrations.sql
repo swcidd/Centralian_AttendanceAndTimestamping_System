@@ -1,27 +1,4 @@
--- ============================================================
--- 0014_drop_pending_registrations.sql
--- Pending_Registrations was designed in 0001 §9 as a queue where a
--- teacher types student information before any card exists. That
--- intake path was superseded:
---
---   - Identity now travels ON THE CARD — the firmware serial command
---     WRITE|school_id|first|last writes it into the MIFARE payload,
---     and net.cpp ships it as student_info on every tap.
---   - handleRegistration() in ingest-tap creates the Student row
---     directly from that payload — it never queries this table.
---
--- The design was also internally inconsistent: Enrollments.Student_ID
--- is NOT NULL REFERENCES Students, so a not-yet-bound student could
--- never have been enrolled — the exact gap the table existed to bridge.
---
--- Verified lossless before dropping:
---   - row count            : 0
---   - inbound FKs          : none (only its own outbound FKs)
---   - app code references  : none (grep across src/ + supabase/)
---
--- DROP TABLE also removes its two RLS policies (pending_reg_*),
--- idx_pending_reg_poll, and pending_registrations_stub_code_fkey
--- (0012:111-113) with it.
--- ============================================================
-
+-- Pending_Registrations is obsolete: student identity now travels on the
+-- card (ingest-tap creates the Student directly from the tap payload). The
+-- table held 0 rows with no inbound FKs or code references.
 DROP TABLE IF EXISTS Pending_Registrations;

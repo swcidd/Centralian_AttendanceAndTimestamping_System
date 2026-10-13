@@ -1,17 +1,5 @@
--- ============================================================
--- NFCPass MVP Schema — 0001_core_schema.sql
--- Applies to: Supabase (PostgreSQL)
--- Naming: PascalCase tables/columns (matches existing frontend code)
--- Run in: Supabase Dashboard → SQL Editor (or `supabase db push`)
--- ============================================================
-
--- ------------------------------------------------------------
--- 1. Instructor profiles, keyed 1:1 to Supabase Auth users.
---    Passwords live in auth.users; this table holds teacher data.
---    Profile_ID IS the auth.users id (no separate surrogate key),
---    so ownership policies below can compare directly against
---    auth.uid() instead of joining through a second UUID column.
--- ------------------------------------------------------------
+-- Instructor profiles, 1:1 with auth.users. Profile_ID IS the auth user id,
+-- so ownership policies compare directly against auth.uid().
 CREATE TABLE Profiles (
     Profile_ID   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     First_Name   VARCHAR(100) NOT NULL,
@@ -20,9 +8,7 @@ CREATE TABLE Profiles (
     Created_At   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ------------------------------------------------------------
--- 2. Physical ESP32 terminals
--- ------------------------------------------------------------
+-- Physical ESP32 terminals.
 CREATE TABLE Devices (
     Device_MAC VARCHAR(50) PRIMARY KEY,
     Room_Name  VARCHAR(100) NOT NULL,
@@ -30,14 +16,8 @@ CREATE TABLE Devices (
     Created_At TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ------------------------------------------------------------
--- 3. Students — rows are created only at card-bind time during a
---    REGISTRATION session, so NFC_UID is always present (no orphans).
---    Student_ID IS the student's school_id (written on the NFC card),
---    not an auto-generated UUID. Only School_ID/First_Name/Last_Name
---    are ever collected from a student; NFC_UID is bound automatically
---    from the tap itself.
--- ------------------------------------------------------------
+-- Student_ID is the student's school_id (written on the card); NFC_UID is
+-- bound from the tap itself at registration time.
 CREATE TABLE Students (
     Student_ID VARCHAR(50) PRIMARY KEY,
     First_Name VARCHAR(100) NOT NULL,
@@ -46,9 +26,6 @@ CREATE TABLE Students (
     Created_At TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ------------------------------------------------------------
--- 4. Class offerings; the owning teacher manages each course
--- ------------------------------------------------------------
 CREATE TABLE Courses (
     Stub_Code     VARCHAR(20) PRIMARY KEY,
     Subject_Code  VARCHAR(50) NOT NULL,
@@ -61,9 +38,6 @@ CREATE TABLE Courses (
     Created_At    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ------------------------------------------------------------
--- 5. Class masterlist (roster); one enrollment per student per course
--- ------------------------------------------------------------
 CREATE TABLE Enrollments (
     Enrollment_ID UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Stub_Code     VARCHAR(20) NOT NULL REFERENCES Courses(Stub_Code) ON DELETE CASCADE,
@@ -72,11 +46,7 @@ CREATE TABLE Enrollments (
     UNIQUE (Stub_Code, Student_ID)
 );
 
--- ------------------------------------------------------------
--- 6. Gated windows opened by a teacher from the dashboard.
---    ACTIVE_ATTENDANCE = taps count as attendance.
---    REGISTRATION      = taps bind Pending_Registrations to new Students.
--- ------------------------------------------------------------
+-- Gated windows: ACTIVE_ATTENDANCE counts taps, REGISTRATION binds cards.
 CREATE TABLE Active_Sessions (
     Session_ID  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Stub_Code   VARCHAR(20) NOT NULL REFERENCES Courses(Stub_Code),
@@ -86,13 +56,8 @@ CREATE TABLE Active_Sessions (
     Created_By  UUID REFERENCES Profiles(Profile_ID)
 );
 
--- ------------------------------------------------------------
--- 7. Append-only attendance records; raw NFC_UID kept for audit.
---    Student_ID is NULL with Status 'UNKNOWN' when an unregistered
---    card taps — logged for audit without inventing a student row.
---    Inserts happen ONLY via the ingest-tap Edge Function
---    (service role bypasses RLS); clients get read-only access.
--- ------------------------------------------------------------
+-- Append-only; inserts only via ingest-tap (service role). An unregistered
+-- tap logs Student_ID NULL with Status 'UNKNOWN'.
 CREATE TABLE Attendance_Logs (
     Log_ID     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Session_ID UUID NOT NULL REFERENCES Active_Sessions(Session_ID) ON DELETE CASCADE,
@@ -104,27 +69,18 @@ CREATE TABLE Attendance_Logs (
     Timestamp  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ------------------------------------------------------------
--- 8. Dashboard -> device command mailbox. The ESP32 polls for
---    PENDING commands every ~5s and ACKs them via the Edge Function.
---    Clients may create commands; ACK updates are service-role only.
--- ------------------------------------------------------------
+-- Dashboard -> device command mailbox, polled by the ESP32.
 CREATE TABLE Device_Commands (
     Command_ID      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Device_MAC      VARCHAR(50) NOT NULL REFERENCES Devices(Device_MAC) ON DELETE CASCADE,
-    Stub_Code       VARCHAR(20) REFERENCES Courses(Stub_Code), -- context payload for the command
+    Stub_Code       VARCHAR(20) REFERENCES Courses(Stub_Code), -- context payload
     Command_Type    VARCHAR(30) NOT NULL,                      -- START_REGISTRATION | START_ATTENDANCE | END_SESSION
     Status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',    -- PENDING | ACKNOWLEDGED
     Created_At      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     Acknowledged_At TIMESTAMPTZ
 );
 
--- ------------------------------------------------------------
--- 9. Self-entered student info waiting for a card tap to bind.
---    On tap during REGISTRATION, the Edge Function takes the oldest
---    PENDING row for that device+stub_code, creates the Student,
---    enrolls them, and marks this row BOUND.
--- ------------------------------------------------------------
+-- Self-entered student info awaiting a card tap to bind.
 CREATE TABLE Pending_Registrations (
     Registration_ID UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     Stub_Code       VARCHAR(20) NOT NULL REFERENCES Courses(Stub_Code) ON DELETE CASCADE,
@@ -136,9 +92,6 @@ CREATE TABLE Pending_Registrations (
     Created_At      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ============================================================
--- Indexes (hot paths: dashboard reads + ESP32 polls)
--- ============================================================
 CREATE INDEX idx_attendance_stub_time   ON Attendance_Logs (Stub_Code, Timestamp DESC);
 CREATE INDEX idx_attendance_session     ON Attendance_Logs (Session_ID);
 CREATE INDEX idx_device_commands_poll   ON Device_Commands (Status, Device_MAC);
@@ -146,13 +99,8 @@ CREATE INDEX idx_pending_reg_poll       ON Pending_Registrations (Status, Device
 CREATE INDEX idx_active_sessions_device ON Active_Sessions (Device_MAC, Status);
 CREATE INDEX idx_enrollments_student    ON Enrollments (Student_ID);
 
--- ============================================================
--- Signup trigger: auto-create a Profiles row whenever a teacher
--- signs up. Expects Supabase Auth signUp() metadata:
---   { first_name, last_name, school_id }
--- SECURITY DEFINER so the insert into public.Profiles is allowed
--- even though no session/RLS context exists mid-signup.
--- ============================================================
+-- Auto-creates the Profiles row at signup. SECURITY DEFINER so the insert is
+-- allowed with no session/RLS context mid-signup.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -176,14 +124,8 @@ CREATE TRIGGER on_auth_user_created
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_new_user();
 
--- ============================================================
--- Row Level Security
--- Convention:
---   * Teachers (authenticated) read everything they need.
---   * Writes are scoped to ownership where it makes sense.
---   * Tables fed by the Edge Function (service role bypasses RLS)
---     intentionally have NO client write policies.
--- ============================================================
+-- Reads are open to authenticated teachers; writes are ownership-scoped.
+-- Tables fed by the Edge Function have no client write policies.
 ALTER TABLE Profiles               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Devices                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Students               ENABLE ROW LEVEL SECURITY;
@@ -194,7 +136,6 @@ ALTER TABLE Attendance_Logs        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Device_Commands        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE Pending_Registrations  ENABLE ROW LEVEL SECURITY;
 
--- ---- Profiles: readable by all teachers; editable by owner ----
 CREATE POLICY "profiles_select_authenticated" ON Profiles
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "profiles_insert_own" ON Profiles
@@ -204,17 +145,14 @@ CREATE POLICY "profiles_update_own" ON Profiles
 CREATE POLICY "profiles_delete_own" ON Profiles
     FOR DELETE TO authenticated USING (Profile_ID = auth.uid());
 
--- ---- Devices: shared registry; authenticated teachers manage terminals ----
 CREATE POLICY "devices_select_authenticated" ON Devices
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "devices_write_authenticated" ON Devices
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- ---- Students: global directory; readable by all teachers ----
 CREATE POLICY "students_select_authenticated" ON Students
     FOR SELECT TO authenticated USING (true);
 
--- ---- Courses: full CRUD restricted to the owning instructor ----
 CREATE POLICY "courses_select_authenticated" ON Courses
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "courses_insert_own" ON Courses
@@ -224,7 +162,6 @@ CREATE POLICY "courses_update_own" ON Courses
 CREATE POLICY "courses_delete_own" ON Courses
     FOR DELETE TO authenticated USING (Instructor_ID = auth.uid());
 
--- ---- Enrollments: manage roster only for courses you own ----
 CREATE POLICY "enrollments_select_authenticated" ON Enrollments
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "enrollments_insert_own_course" ON Enrollments
@@ -240,7 +177,6 @@ CREATE POLICY "enrollments_delete_own_course" ON Enrollments
                   AND c.Instructor_ID = auth.uid())
     );
 
--- ---- Active_Sessions: only the creator manages their gate windows ----
 CREATE POLICY "sessions_select_authenticated" ON Active_Sessions
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "sessions_insert_own" ON Active_Sessions
@@ -250,29 +186,19 @@ CREATE POLICY "sessions_update_own" ON Active_Sessions
 CREATE POLICY "sessions_delete_own" ON Active_Sessions
     FOR DELETE TO authenticated USING (Created_By = auth.uid());
 
--- ---- Attendance_Logs: READ-ONLY for clients.
---      No INSERT/UPDATE/DELETE policies on purpose:
---      writes flow exclusively through the Edge Function. ----
+-- Read-only for clients; writes flow through the Edge Function.
 CREATE POLICY "logs_select_authenticated" ON Attendance_Logs
     FOR SELECT TO authenticated USING (true);
 
--- ---- Device_Commands: teachers create commands; ACK is service-role only ----
 CREATE POLICY "commands_select_authenticated" ON Device_Commands
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "commands_insert_authenticated" ON Device_Commands
     FOR INSERT TO authenticated WITH CHECK (true);
 
--- ---- Pending_Registrations: teachers add queue entries;
---      binding/cleanup transitions are service-role only ----
 CREATE POLICY "pending_reg_select_authenticated" ON Pending_Registrations
     FOR SELECT TO authenticated USING (true);
 CREATE POLICY "pending_reg_insert_authenticated" ON Pending_Registrations
     FOR INSERT TO authenticated WITH CHECK (true);
 
--- ============================================================
--- Realtime streams
---   Attendance_Logs : dashboard live attendance updates
---   Device_Commands : dashboard sees device ACKs instantly
--- ============================================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.Attendance_Logs;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.Device_Commands;

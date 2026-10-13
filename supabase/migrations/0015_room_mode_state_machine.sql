@@ -1,29 +1,7 @@
--- ============================================================
--- 0015_room_mode_state_machine.sql
--- Rebuild the CATS schema to the room-mode state machine design.
---
--- Why a rebuild and not an in-place delta:
---   PostgreSQL refuses ALTER COLUMN TYPE / DROP COLUMN while an RLS
---   policy expression or a foreign key depends on the column. The
---   live database held no attendance data (one instructor profile
---   only), and the legacy shape shares almost no column names with
---   the new one, so dropping and recreating is both correct and
---   lossless. The one profile row is carried over first.
---
--- User-approved decisions baked in:
---   1. stubcodes.course_stubcode  = global INTEGER primary key
---   2. devices.device_id          = ESP32 MAC; room derived server-side
---   3. instructors.instructor_id  = uuid = auth.users.id
---   4. RLS on every table; device-facing tables are service_role only
---   5. device_commands / claim_next_device_command / finalize_absences
---      removed - the stateless scan endpoint replaces the poll loop
---   6. No deferrable FK except the two-path cascade into attendance
--- ============================================================
+-- Rebuild to the room-mode design. Postgres refuses in-place column changes
+-- while a policy/FK depends on the column, and the legacy shape shares almost
+-- no columns with the new one; the existing instructor row is carried over.
 
--- ============================================================
--- 0. Carry the existing instructor over, then drop the legacy schema.
---    Every step is guarded so the file also runs on a fresh project.
--- ============================================================
 CREATE TABLE IF NOT EXISTS public.instructors (
   instructor_id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
   first_name    varchar NOT NULL,
@@ -44,12 +22,10 @@ BEGIN
   END IF;
 END $$;
 
--- Legacy server-side helpers (poll loop + pg_cron absent sweep).
 DROP FUNCTION IF EXISTS public.finalize_absences();
 DROP FUNCTION IF EXISTS public.claim_next_device_command(varchar);
 DROP FUNCTION IF EXISTS public.claim_next_device_command(character varying);
 
--- Legacy tables (CASCADE clears their policies, indexes and FKs).
 DROP TABLE IF EXISTS public.device_commands     CASCADE;
 DROP TABLE IF EXISTS public.attendance_logs     CASCADE;
 DROP TABLE IF EXISTS public.active_sessions     CASCADE;
@@ -74,10 +50,8 @@ DROP TYPE IF EXISTS public.attendance_status_enum CASCADE;
 DROP TYPE IF EXISTS public.attendance_source_enum CASCADE;
 DROP TYPE IF EXISTS public.scan_result_enum       CASCADE;
 
--- instructors is the one legacy table that is carried over rather than
--- dropped, so its policies outlive the DROP TABLE sweep above. Clear
--- every public policy up front so the CREATE POLICY block below is
--- re-run safe on an already-migrated database.
+-- instructors outlives the DROP TABLE sweep, so clear every public policy up
+-- front to keep the CREATE POLICY block below re-run safe.
 DO $$
 DECLARE r record;
 BEGIN
@@ -88,9 +62,6 @@ BEGIN
   END LOOP;
 END $$;
 
--- ============================================================
--- 1. Enums
--- ============================================================
 CREATE TYPE course_type_enum       AS ENUM ('lect', 'lab');
 CREATE TYPE instructor_role_enum   AS ENUM ('co', 'substitute');
 CREATE TYPE room_mode_enum         AS ENUM ('enroll', 'attend');
@@ -99,13 +70,6 @@ CREATE TYPE attendance_source_enum AS ENUM ('system', 'instructor');
 CREATE TYPE scan_result_enum       AS ENUM ('ok', 'unknown_card', 'not_enrolled',
                                             'no_active_mode', 'duplicate', 'rejected');
 
--- ============================================================
--- 2. Core entities
--- ============================================================
-
--- instructors already exists (created in step 0).
-
--- courses - subject identity only; schedule lives on the section.
 CREATE TABLE public.courses (
   course_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_code  varchar NOT NULL,
@@ -117,7 +81,6 @@ CREATE TABLE public.courses (
   CONSTRAINT courses_code_type_key UNIQUE (course_code, course_type)
 );
 
--- students - student_id is the school-issued ID (leading zeros / letters matter).
 CREATE TABLE public.students (
   student_id        varchar PRIMARY KEY,
   student_firstname varchar NOT NULL,
@@ -127,7 +90,7 @@ CREATE TABLE public.students (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
--- student_cards - reissuable; one active card per student.
+-- One active (non-revoked) card per student.
 CREATE TABLE public.student_cards (
   card_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id varchar NOT NULL
@@ -140,7 +103,7 @@ CREATE TABLE public.student_cards (
 CREATE UNIQUE INDEX student_cards_one_active_idx
   ON public.student_cards (student_id) WHERE revoked_at IS NULL;
 
--- stubcodes - the section; the registrar's number is the global key.
+-- course_stubcode is the registrar's globally unique section number.
 CREATE TABLE public.stubcodes (
   course_stubcode integer PRIMARY KEY,
   course_id       uuid NOT NULL
@@ -151,7 +114,6 @@ CREATE TABLE public.stubcodes (
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- stubcode_instructors - co-teachers / substitutes (owner stays on stubcodes).
 CREATE TABLE public.stubcode_instructors (
   course_stubcode integer NOT NULL
                   REFERENCES public.stubcodes (course_stubcode) ON UPDATE CASCADE ON DELETE CASCADE,
@@ -161,7 +123,7 @@ CREATE TABLE public.stubcode_instructors (
   PRIMARY KEY (course_stubcode, instructor_id)
 );
 
--- enrollments - soft drop via dropped_at; one active row per (section, student).
+-- Soft drop via dropped_at; one active row per (section, student).
 CREATE TABLE public.enrollments (
   enrollment_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_stubcode integer NOT NULL
@@ -174,9 +136,8 @@ CREATE TABLE public.enrollments (
   CONSTRAINT enrollments_id_stubcode_key UNIQUE (enrollment_id, course_stubcode)
 );
 
--- stubcode_schedules - one meeting slot per (section, day, start).
--- schedule_day is ISO: 1 = Monday ... 7 = Sunday.
--- Thresholds are minutes after schedule_start, evaluated at tap time.
+-- schedule_day is ISO: 1 = Monday ... 7 = Sunday. Thresholds are minutes
+-- after schedule_start, evaluated at tap time.
 CREATE TABLE public.stubcode_schedules (
   stubcode_schedule_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_id            uuid NOT NULL
@@ -202,12 +163,7 @@ CREATE TABLE public.stubcode_schedules (
   )
 );
 
--- ============================================================
--- 3. Room-mode state machine
--- ============================================================
-
--- class_sessions - closed_at IS NULL means the session is open.
--- One row per (schedule slot, date).
+-- closed_at IS NULL means the session is open; one row per (slot, date).
 CREATE TABLE public.class_sessions (
   session_id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   stubcode_schedule_id uuid NOT NULL,
@@ -222,8 +178,7 @@ CREATE TABLE public.class_sessions (
     ON UPDATE CASCADE ON DELETE CASCADE
 );
 
--- room_modes - room is the PK, so a room has at most one active mode.
--- Closing a mode = deleting the row.
+-- room is the PK, so a room has at most one active mode; closing = deleting.
 CREATE TABLE public.room_modes (
   room            varchar PRIMARY KEY,
   mode            room_mode_enum NOT NULL,
@@ -241,9 +196,7 @@ CREATE TABLE public.room_modes (
   )
 );
 
--- attendance - one row per (session, enrollment); a tap UPDATEs it.
--- The two DEFERRABLE FKs let course_stubcode reach attendance along
--- both the class_sessions path and the enrollments path.
+-- One row per (session, enrollment); a tap UPDATEs it.
 CREATE TABLE public.attendance (
   attendance_id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id           uuid NOT NULL,
@@ -264,7 +217,7 @@ CREATE TABLE public.attendance (
     ON UPDATE CASCADE ON DELETE CASCADE
 );
 
--- scan_logs - append-only audit; deliberately no FKs so unknown cards log.
+-- Append-only audit; deliberately no FKs so unknown cards still log.
 CREATE TABLE public.scan_logs (
   scan_id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   scanned_at      timestamptz NOT NULL DEFAULT now(),
@@ -277,7 +230,7 @@ CREATE TABLE public.scan_logs (
   session_id      uuid
 );
 
--- devices - device_id is the ESP32 MAC; room is what the backend derives.
+-- device_id is the ESP32 MAC; room is derived by the backend.
 CREATE TABLE public.devices (
   device_id  varchar PRIMARY KEY,
   room       varchar,
@@ -287,9 +240,7 @@ CREATE TABLE public.devices (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- ============================================================
--- 4. Indexes (Postgres does not index FK columns automatically)
--- ============================================================
+-- Postgres does not index FK columns automatically.
 CREATE INDEX stubcodes_course_id_idx          ON public.stubcodes (course_id);
 CREATE INDEX stubcodes_instructor_id_idx      ON public.stubcodes (instructor_id);
 CREATE INDEX enrollments_student_id_idx       ON public.enrollments (student_id);
@@ -299,13 +250,9 @@ CREATE INDEX attendance_session_idx           ON public.attendance (session_id);
 CREATE INDEX attendance_enrollment_id_idx     ON public.attendance (enrollment_id);
 CREATE INDEX scan_logs_scanned_at_idx         ON public.scan_logs (scanned_at);
 
--- ============================================================
--- 5. Row Level Security
---    Reads are open to authenticated users (catalog UIs).
---    Writes are owner-scoped, except for the device-facing tables
---    (room_modes, scan_logs, student_cards, students) which only the
---    Edge Functions write through the service_role.
--- ============================================================
+-- Reads are open to authenticated users. Writes are owner-scoped, except the
+-- device-facing tables (room_modes, scan_logs, student_cards, students) which
+-- only the Edge Functions write through the service_role.
 ALTER TABLE public.instructors          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courses              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.students             ENABLE ROW LEVEL SECURITY;
@@ -320,7 +267,6 @@ ALTER TABLE public.attendance           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scan_logs            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.devices              ENABLE ROW LEVEL SECURITY;
 
--- instructors
 CREATE POLICY instructors_select_auth ON public.instructors
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY instructors_insert_own ON public.instructors
@@ -330,7 +276,6 @@ CREATE POLICY instructors_update_own ON public.instructors
 CREATE POLICY instructors_delete_own ON public.instructors
   FOR DELETE TO authenticated USING (instructor_id = auth.uid());
 
--- courses
 CREATE POLICY courses_select_auth ON public.courses
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY courses_insert_own ON public.courses
@@ -340,7 +285,6 @@ CREATE POLICY courses_update_own ON public.courses
 CREATE POLICY courses_delete_own ON public.courses
   FOR DELETE TO authenticated USING (created_by = auth.uid());
 
--- stubcodes
 CREATE POLICY stubcodes_select_auth ON public.stubcodes
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY stubcodes_insert_own ON public.stubcodes
@@ -350,7 +294,6 @@ CREATE POLICY stubcodes_update_own ON public.stubcodes
 CREATE POLICY stubcodes_delete_own ON public.stubcodes
   FOR DELETE TO authenticated USING (instructor_id = auth.uid());
 
--- stubcode_instructors
 CREATE POLICY stubcode_instructors_select_auth ON public.stubcode_instructors
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY stubcode_instructors_write_own ON public.stubcode_instructors
@@ -358,7 +301,6 @@ CREATE POLICY stubcode_instructors_write_own ON public.stubcode_instructors
   USING (instructor_id = auth.uid())
   WITH CHECK (instructor_id = auth.uid());
 
--- enrollments - the section's instructor owns the roster.
 CREATE POLICY enrollments_select_auth ON public.enrollments
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY enrollments_write_own ON public.enrollments
@@ -372,7 +314,6 @@ CREATE POLICY enrollments_write_own ON public.enrollments
     WHERE s.course_stubcode = enrollments.course_stubcode
       AND s.instructor_id = auth.uid()));
 
--- stubcode_schedules
 CREATE POLICY schedules_select_auth ON public.stubcode_schedules
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY schedules_write_own ON public.stubcode_schedules
@@ -386,7 +327,6 @@ CREATE POLICY schedules_write_own ON public.stubcode_schedules
     WHERE s.course_stubcode = stubcode_schedules.course_stubcode
       AND s.instructor_id = auth.uid()));
 
--- class_sessions
 CREATE POLICY class_sessions_select_auth ON public.class_sessions
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY class_sessions_write_own ON public.class_sessions
@@ -400,7 +340,6 @@ CREATE POLICY class_sessions_write_own ON public.class_sessions
     WHERE s.course_stubcode = class_sessions.course_stubcode
       AND s.instructor_id = auth.uid()));
 
--- attendance
 CREATE POLICY attendance_select_auth ON public.attendance
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY attendance_write_own ON public.attendance
@@ -414,14 +353,12 @@ CREATE POLICY attendance_write_own ON public.attendance
     WHERE s.course_stubcode = attendance.course_stubcode
       AND s.instructor_id = auth.uid()));
 
--- devices
 CREATE POLICY devices_select_auth ON public.devices
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY devices_write_auth ON public.devices
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- students / student_cards / room_modes / scan_logs:
--- read for authenticated, write only via service_role (Edge Functions).
+-- Read for authenticated, write only via service_role (Edge Functions).
 CREATE POLICY students_select_auth ON public.students
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY student_cards_select_auth ON public.student_cards
@@ -431,9 +368,6 @@ CREATE POLICY room_modes_select_auth ON public.room_modes
 CREATE POLICY scan_logs_select_auth ON public.scan_logs
   FOR SELECT TO authenticated USING (true);
 
--- ============================================================
--- 6. Grants
--- ============================================================
 GRANT USAGE ON SCHEMA public TO authenticated, service_role;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON
@@ -450,11 +384,9 @@ GRANT ALL ON
   public.attendance, public.scan_logs, public.devices
 TO service_role;
 
--- ============================================================
--- 7. Signup trigger - now writes to instructors, not profiles.
---    The trigger itself is OID-based, so replacing the function body
---    is enough; it is created here only on a fresh project.
--- ============================================================
+-- Signup trigger now writes to instructors instead of profiles. The trigger is
+-- OID-based, so replacing the function body is enough; it is created here only
+-- on a fresh project.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -483,9 +415,7 @@ BEGIN
   END IF;
 END $$;
 
--- ============================================================
--- 8. Realtime - live roster/session updates for the dashboard.
--- ============================================================
+-- Realtime for live roster/session updates.
 DO $$
 DECLARE
   t text;
@@ -503,7 +433,3 @@ BEGIN
     END LOOP;
   END IF;
 END $$;
-
--- ============================================================
--- End of 0015_room_mode_state_machine.sql
--- ============================================================

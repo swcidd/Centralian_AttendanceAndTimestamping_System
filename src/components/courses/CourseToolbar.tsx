@@ -28,6 +28,7 @@ const CourseToolbar = ({
 
       <div className="flex gap-3">
         <button
+          type="button"
           onClick={() => setIsModalOpen(true)}
           className="bg-orange rounded-lg px-5 py-2.5 text-sm font-medium text-white hover:brightness-95 active:scale-90"
         >

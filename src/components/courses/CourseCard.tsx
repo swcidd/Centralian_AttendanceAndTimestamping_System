@@ -58,6 +58,7 @@ const CourseCard = ({
           </button>
         </div>
         <button
+          type="button"
           onClick={onDelete}
           aria-label={`Delete ${name}`}
           className="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
@@ -94,6 +95,7 @@ const CourseCard = ({
                 </span>
               </p>
               <button
+                type="button"
                 onClick={onAssign}
                 className="text-orange text-xs font-medium transition hover:underline"
               >
@@ -104,6 +106,7 @@ const CourseCard = ({
             <div className="mt-1 flex items-center justify-between gap-2">
               <p className="text-navy/40">No terminal assigned</p>
               <button
+                type="button"
                 onClick={onAssign}
                 className="bg-orange rounded-md px-2.5 py-1 text-xs font-medium text-white transition hover:brightness-95"
               >

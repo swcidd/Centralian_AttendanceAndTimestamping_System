@@ -139,10 +139,13 @@ const Sidebar = ({ isOpen, toggleSidebar }: SidebarProps) => {
         }`}
       >
         <div className="mb-2 flex justify-end">
-          <CiMenuBurger
-            className="stroke-1 text-2xl text-white"
+          <button
+            type="button"
             onClick={toggleSidebar}
-          />
+            aria-label="Close navigation"
+          >
+            <CiMenuBurger className="stroke-1 text-2xl text-white" />
+          </button>
         </div>
         {accountBlock}
         {navBlock}

@@ -71,11 +71,11 @@ const TrackingPage = () => {
     loadRoster();
   }, [loadRoster]);
 
-  // Registration mode has no per-tap attendance_logs row (see ingest-tap's
-  // REGISTRATION branch) — instead each tap creates a Students +
-  // Enrollments row. Re-running the same roster fetch on every new
-  // enrollment turns the existing table into a live registration list for
-  // free, without a second parallel data structure.
+  // Enrolment taps write no attendance row (see ingest-tap's enroll
+  // branch) — each creates a Students + Enrollments row instead.
+  // Re-running the same roster fetch on every new enrollment turns the
+  // existing table into a live registration list for free, without a
+  // second parallel data structure.
   useEffect(() => {
     if (!selectedStub || activeSession?.status !== "REGISTRATION") return;
 

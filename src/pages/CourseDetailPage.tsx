@@ -55,15 +55,6 @@ const CourseDetailPage = () => {
   const handleDeleteStub = async (section: CourseSection) => {
     if (!course) return;
 
-    // A course is its sections; deleting the last one leaves an empty
-    // shell, so steer the operator to delete the course instead.
-    if (course.sections.length === 1) {
-      setError(
-        `"${course.name}" needs at least one section — delete the course instead.`
-      );
-      return;
-    }
-
     setError(null);
 
     let attendance: number;

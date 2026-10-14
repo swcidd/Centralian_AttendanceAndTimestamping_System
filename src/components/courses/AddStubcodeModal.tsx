@@ -12,6 +12,12 @@ interface AddStubcodeModalProps {
 const inputClass =
   "border-tan text-navy focus:border-orange focus:ring-orange/20 w-full rounded-lg border bg-white px-4 py-2.5 text-sm outline-none focus:ring-2";
 
+// Blank/invalid timing falls back to the schema defaults.
+function toMinutes(value: FormDataEntryValue | null, fallback: number): number {
+  const n = Number(typeof value === "string" ? value : "");
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
 // Adds another independent section to an existing course. The section gets
 // its own class type and its own schedule/terminal — it does NOT inherit
 // the course's, unlike the previous shared-schedule behaviour.
@@ -47,6 +53,8 @@ const AddStubcodeModal = ({
         startTime: formData.get("startTime") as string,
         endTime: formData.get("endTime") as string,
         daysOfWeek: formData.get("daysOfWeek") as string,
+        lateAfterMinutes: toMinutes(formData.get("lateAfterMinutes"), 15),
+        absentAfterMinutes: toMinutes(formData.get("absentAfterMinutes"), 30),
         deviceMac: deviceMac || null,
         roomName: roomName || null,
       });
@@ -117,6 +125,41 @@ const AddStubcodeModal = ({
             placeholder="Days (e.g. MWF)"
             className={inputClass}
           />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="lateAfterMinutes"
+                className="text-navy/60 mb-1 block text-xs font-medium"
+              >
+                Late after (min)
+              </label>
+              <input
+                id="lateAfterMinutes"
+                name="lateAfterMinutes"
+                type="number"
+                min={1}
+                defaultValue={15}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="absentAfterMinutes"
+                className="text-navy/60 mb-1 block text-xs font-medium"
+              >
+                Absent after (min)
+              </label>
+              <input
+                id="absentAfterMinutes"
+                name="absentAfterMinutes"
+                type="number"
+                min={1}
+                defaultValue={30}
+                className={inputClass}
+              />
+            </div>
+          </div>
 
           <p className="text-navy/60 pt-2 text-xs font-medium">
             Terminal (optional — can be assigned later)

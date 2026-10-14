@@ -210,13 +210,17 @@ export async function fetchDevices(): Promise<DeviceInfo[]> {
 }
 
 export interface NewCourseInput {
-  stubCode: string;
   subjectCode: string;
   courseName: string;
+  // Leave stubCode empty to create the course with no section; stubcodes
+  // can be added later from the course card.
+  stubCode: string;
   courseType: CourseType;
   startTime: string;
   endTime: string;
   daysOfWeek: string;
+  lateAfterMinutes: number;
+  absentAfterMinutes: number;
   deviceMac: string | null;
   roomName: string | null;
 }
@@ -228,6 +232,8 @@ export interface SectionInput {
   startTime: string;
   endTime: string;
   daysOfWeek: string;
+  lateAfterMinutes: number;
+  absentAfterMinutes: number;
   deviceMac: string | null;
   roomName: string | null;
 }
@@ -282,7 +288,9 @@ async function insertSchedules(
   room: string,
   daysOfWeek: string,
   startTime: string,
-  endTime: string
+  endTime: string,
+  lateAfterMinutes: number,
+  absentAfterMinutes: number
 ) {
   const days = parseDays(daysOfWeek);
   if (days.length === 0) return;
@@ -297,6 +305,8 @@ async function insertSchedules(
         schedule_day: day,
         schedule_start: startTime,
         schedule_end: endTime,
+        late_after_minutes: lateAfterMinutes,
+        absent_after_minutes: absentAfterMinutes,
       }))
     );
 
@@ -344,7 +354,9 @@ export async function addStubcode(
       input.roomName ?? "",
       input.daysOfWeek,
       input.startTime,
-      input.endTime
+      input.endTime,
+      input.lateAfterMinutes,
+      input.absentAfterMinutes
     );
   } catch (scheduleError) {
     // Don't leave a section with no schedule behind.
@@ -361,7 +373,9 @@ export async function createCourse(input: NewCourseInput) {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
-  const stub = parseStubcode(input.stubCode);
+  // A course may be created with no section; the stubcode and its schedule
+  // are added later from the course card.
+  const stub = input.stubCode.trim() ? parseStubcode(input.stubCode) : null;
 
   if (input.deviceMac && input.roomName) {
     await upsertDevice(input.deviceMac, input.roomName);
@@ -398,39 +412,44 @@ export async function createCourse(input: NewCourseInput) {
 
   // The form's stub code becomes the course's first section, with its own
   // type; its "MWF, 08:00 - 09:00" becomes one schedule row per weekday.
-  // If any of that fails, remove a course we just created rather than
-  // leave a half-built course behind.
-  try {
-    const { error: stubError } = await supabase
-      .from("stubcodes")
-      .insert({
-        course_stubcode: stub,
-        course_id: courseId,
-        instructor_id: userData.user?.id ?? null,
-        course_type: input.courseType,
-      });
-    if (stubError) {
-      if (stubError.code === UNIQUE_VIOLATION) {
-        throw new Error(
-          `Stub code "${stub}" already has a ${TYPE_NAME[input.courseType]} section.`
-        );
+  // When no stub code was given the course is left empty. If section setup
+  // fails, remove a course we just created rather than leave a half-built
+  // course behind.
+  if (stub !== null) {
+    try {
+      const { error: stubError } = await supabase
+        .from("stubcodes")
+        .insert({
+          course_stubcode: stub,
+          course_id: courseId,
+          instructor_id: userData.user?.id ?? null,
+          course_type: input.courseType,
+        });
+      if (stubError) {
+        if (stubError.code === UNIQUE_VIOLATION) {
+          throw new Error(
+            `Stub code "${stub}" already has a ${TYPE_NAME[input.courseType]} section.`
+          );
+        }
+        throw stubError;
       }
-      throw stubError;
-    }
 
-    await insertSchedules(
-      stub,
-      input.courseType,
-      input.roomName ?? "",
-      input.daysOfWeek,
-      input.startTime,
-      input.endTime
-    );
-  } catch (buildError) {
-    if (createdCourse && courseId) {
-      await supabase.from("courses").delete().eq("course_id", courseId);
+      await insertSchedules(
+        stub,
+        input.courseType,
+        input.roomName ?? "",
+        input.daysOfWeek,
+        input.startTime,
+        input.endTime,
+        input.lateAfterMinutes,
+        input.absentAfterMinutes
+      );
+    } catch (buildError) {
+      if (createdCourse && courseId) {
+        await supabase.from("courses").delete().eq("course_id", courseId);
+      }
+      throw buildError;
     }
-    throw buildError;
   }
 }
 
@@ -460,8 +479,8 @@ export async function countAttendance(
 
 // Deletes one section from a course. Everything keyed beneath it —
 // roster, schedules, sessions, room modes, and attendance — goes with it
-// via the FK cascades; the UI confirms the record count first and the
-// course must keep at least one section (enforced in the page).
+// via the FK cascades; the UI confirms the record count first. A course
+// may be left with no sections (it can be created that way too).
 export async function deleteStubcode(section: CourseSection): Promise<void> {
   const { error } = await supabase
     .from("stubcodes")

@@ -5,6 +5,7 @@ import ActivityGrid from "../components/activity/ActivityGrid";
 import ActivityDetails from "../components/activity/ActivityDetails";
 
 import { fetchActivityLog, fetchSessionRoster } from "../services/attendanceApi";
+import { sectionKey } from "../lib/utils/section";
 import type { Activity, CourseSection, StudentStatus } from "../types/types";
 
 const ActivityPage = () => {
@@ -17,12 +18,21 @@ const ActivityPage = () => {
   );
   const [students, setStudents] = useState<StudentStatus[]>([]);
 
-  useEffect(() => {
+  const sectionId = selectedSection ? sectionKey(selectedSection) : null;
+
+  // Reset during render (not in an effect) so switching sections clears the
+  // previous section's list and selection before the new fetch resolves,
+  // instead of showing stale data for a frame.
+  const [trackedKey, setTrackedKey] = useState<string | null>(null);
+  if (sectionId !== trackedKey) {
+    setTrackedKey(sectionId);
     setSelectedActivityId(null);
-    if (!selectedSection) {
-      setActivities([]);
-      return;
-    }
+    setActivities([]);
+    setStudents([]);
+  }
+
+  useEffect(() => {
+    if (!selectedSection) return;
     fetchActivityLog(selectedSection)
       .then(setActivities)
       .catch(() => setActivities([]));
@@ -33,10 +43,7 @@ const ActivityPage = () => {
   );
 
   useEffect(() => {
-    if (!selectedSection || !selectedActivityId) {
-      setStudents([]);
-      return;
-    }
+    if (!selectedSection || !selectedActivityId) return;
     fetchSessionRoster(selectedSection, selectedActivityId)
       .then(setStudents)
       .catch(() => setStudents([]));

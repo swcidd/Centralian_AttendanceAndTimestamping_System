@@ -21,28 +21,30 @@ const StubcodeMasterlistPage = () => {
 
   const [students, setStudents] = useState<StudentStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [code, type] = sectionKey?.split("|") ?? [];
+  const invalid = !code || (type !== "lect" && type !== "lab");
   const typeLabel = TYPE_LABEL[type ?? ""] ?? type ?? "";
+  const errorMessage = invalid ? "Invalid stubcode." : error;
+
+  // Reset loading when the URL's stubcode changes (render-time, not in an
+  // effect) so the spinner shows immediately on navigation.
+  const [trackedKey, setTrackedKey] = useState<string | null>(null);
+  if (sectionKey !== trackedKey) {
+    setTrackedKey(sectionKey ?? null);
+    setLoading(true);
+  }
 
   useEffect(() => {
-    if (!sectionKey) return;
-
-    if (!code || (type !== "lect" && type !== "lab")) {
-      setError("Invalid stubcode.");
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+    if (invalid) return;
     fetchSessionRoster({ code, type: type as "lect" | "lab" }, null)
       .then(setStudents)
       .catch((err: unknown) =>
         setError(getErrorMessage(err, "Failed to load masterlist."))
       )
       .finally(() => setLoading(false));
-  }, [sectionKey, code, type]);
+  }, [invalid, code, type]);
 
   return (
     <div className="bg-cream min-h-screen p-6">
@@ -81,13 +83,13 @@ const StubcodeMasterlistPage = () => {
 
         {/* Student list */}
         <div className="border-tan mt-5 overflow-hidden rounded-2xl border bg-white shadow-sm">
-          {error && (
+          {errorMessage && (
             <p className="border-b border-tan bg-red-50 px-6 py-3 text-sm text-red-600">
-              {error}
+              {errorMessage}
             </p>
           )}
 
-          {loading ? (
+          {invalid ? null : loading ? (
             <div className="flex flex-col items-center gap-3 px-6 py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange border-t-transparent" />
               <p className="text-navy/50 text-sm">Loading masterlist...</p>

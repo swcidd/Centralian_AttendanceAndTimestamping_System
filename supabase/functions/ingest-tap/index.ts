@@ -60,15 +60,6 @@ function manilaMinutesOfDay(): number {
   return now.getUTCHours() * 60 + now.getUTCMinutes();
 }
 
-function manilaDateISO(): string {
-  return manilaNow().toISOString().slice(0, 10);
-}
-
-function manilaISODay(): number {
-  const day = manilaNow().getUTCDay();
-  return day === 0 ? 7 : day; // 1 = Monday ... 7 = Sunday
-}
-
 function timeToMinutes(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;

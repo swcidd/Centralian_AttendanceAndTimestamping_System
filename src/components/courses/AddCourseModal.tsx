@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createCourse } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
+import type { CourseType } from "../../types/types";
 
 interface AddCourseModalProps {
   onClose: () => void;
@@ -41,6 +42,7 @@ const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
         stubCode: formData.get("stubCode") as string,
         subjectCode: formData.get("subjectCode") as string,
         courseName: formData.get("courseName") as string,
+        courseType: formData.get("courseType") as CourseType,
         startTime: formData.get("startTime") as string,
         endTime: formData.get("endTime") as string,
         daysOfWeek: formData.get("daysOfWeek") as string,
@@ -101,6 +103,24 @@ const AddCourseModal = ({ onClose, onCreated }: AddCourseModalProps) => {
             placeholder="Course Name"
             className={inputClass}
           />
+
+          <div>
+            <label
+              htmlFor="courseType"
+              className="text-navy/60 mb-1 block text-xs font-medium"
+            >
+              Class Type
+            </label>
+            <select
+              id="courseType"
+              name="courseType"
+              defaultValue="lect"
+              className={inputClass}
+            >
+              <option value="lect">Lecture</option>
+              <option value="lab">Laboratory</option>
+            </select>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <input

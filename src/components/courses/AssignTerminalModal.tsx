@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { fetchDevices, type DeviceInfo } from "../../services/coursesApi";
+import { assignDevice, fetchDevices, type DeviceInfo } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
-import { supabase } from "../../lib/supabase";
+import { sectionLabel } from "../../lib/utils/section";
 import type { Course } from "../../types/types";
 
 interface AssignTerminalModalProps {
@@ -58,16 +58,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
 
     setIsSubmitting(true);
     try {
-      // The schema refactor removed `courses.device_mac` and the old
-      // assignDevice() service, and the terminal registry (`devices`) is now
-      // read through its `room` column (see fetchDevices). Register/update the
-      // terminal there directly. `room_name` is the legacy NOT NULL column.
-      if (mac && room) {
-        const { error: deviceError } = await supabase
-          .from("devices")
-          .upsert({ device_mac: mac, room, room_name: room });
-        if (deviceError) throw deviceError;
-      }
+      await assignDevice(course.sections, mac || null, room || null);
       onAssigned();
       onClose();
     } catch (err) {
@@ -91,7 +82,7 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
       >
         <h2 className="text-navy mb-1 text-xl font-bold">Assign Terminal</h2>
         <p className="text-navy/60 mb-4 text-sm">
-          {course.name} ({course.stubs.join(", ")})
+          {course.name} ({course.sections.map(sectionLabel).join(", ")})
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">

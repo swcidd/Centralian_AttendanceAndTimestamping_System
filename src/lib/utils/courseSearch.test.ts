@@ -5,7 +5,10 @@ import type { Course } from "../../types/types";
 const courses: Course[] = [
   {
     courseId: "course-1",
-    stubs: ["CS101-A", "CS101-B"],
+    sections: [
+      { code: "CS101-A", type: "lect" },
+      { code: "CS101-B", type: "lab" },
+    ],
     name: "Intro to Computer Science",
     schedule: "MWF, 08:00 - 09:00",
     instructor: "Prof. Ada Lovelace",
@@ -14,7 +17,7 @@ const courses: Course[] = [
   },
   {
     courseId: "course-2",
-    stubs: ["SE101-B"],
+    sections: [{ code: "SE101-B", type: "lect" }],
     name: "Software Engineering 101",
     schedule: "TTh, 13:00 - 15:00",
     instructor: "Prof. Grace Hopper",

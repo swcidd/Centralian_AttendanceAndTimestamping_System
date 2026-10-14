@@ -1,8 +1,13 @@
-# Device-facing functions authenticate via PSK-HMAC in the request
-# body (see supabase/functions/_shared/deviceAuth.ts) — the ESP32 has
-# no Supabase Auth session and never sends an Authorization header, so
-# the platform's default JWT gate has to be off for these two or every
-# real device request gets rejected before the function code even runs.
+# ingest-tap is device-facing: the ESP32 authenticates with a PSK-HMAC
+# in the request body (see supabase/functions/_shared/deviceAuth.ts) and
+# has no Supabase Auth session, so the platform's default JWT gate has to
+# be off or every real device request is rejected before the function
+# code runs.
 [functions.ingest-tap]
 verify_jwt = false
 
+# room-action is instructor-facing and called from the dashboard, so it
+# keeps the JWT gate on and authorises the caller's section ownership
+# inside the function.
+[functions.room-action]
+verify_jwt = true

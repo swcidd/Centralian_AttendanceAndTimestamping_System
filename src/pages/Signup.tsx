@@ -63,7 +63,7 @@ const Signup = () => {
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
                 type="text"
                 name="firstName"
@@ -108,19 +108,17 @@ const Signup = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="border-tan bg-cream text-navy hover:bg-tan rounded-md border px-5 py-2 text-sm font-medium disabled:opacity-60"
+              className="bg-orange w-full rounded-md px-3 py-2 text-sm font-medium text-white hover:brightness-95 disabled:opacity-60"
             >
               {isSubmitting ? "Signing up..." : "Signup"}
             </button>
 
-            <div>
-              <Link
+            <Link
                 to="/login"
-                className="text-navy/60 hover:text-orange text-xs"
+                className="text-navy/60 hover:text-orange block pt-1 text-center text-xs font-medium"
               >
                 Back to Login
               </Link>
-            </div>
           </form>
         </div>
       </main>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { CgProfile } from "react-icons/cg";
 import { supabase } from "../lib/supabase";
 
 const Login = () => {
@@ -29,8 +28,11 @@ const Login = () => {
 
   if (!sessionChecked) {
     return (
-      <div className="bg-cream flex min-h-screen items-center justify-center">
-        Loading...
+      <div className="bg-cream min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full border-4 border-orange border animate-spin-slow" />
+          <p className="text-navy/70 text-sm font-medium">Initializing Centralian Attendance System</p>
+        </div>
       </div>
     );
   }
@@ -72,8 +74,12 @@ const Login = () => {
       <main className="flex-1 flex items-center justify-center">
         <div className="border-tan w-full max-w-sm rounded-2xl border bg-white p-6 shadow-sm">
           <div className="mb-4 flex justify-center">
-            <CgProfile className="text-navy/70 text-8xl" />
-          </div>
+              <img
+                src="/assets/logo/cdnlogo.com_central-philippine-university-logo.svg"
+                alt="Central Philippine University Logo"
+                className="w-32 h-32 float"
+              />
+            </div>
 
           <form onSubmit={handleLogin} className="space-y-3">
             {error && (

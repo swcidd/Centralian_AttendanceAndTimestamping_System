@@ -1,131 +1,314 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+// room-action — the instructor-facing state machine endpoint.
+//
+// Unlike ingest-tap this is called from the dashboard, so it
+// authenticates with the caller's Supabase JWT (verify_jwt stays on by
+// default) and only ever acts on sections that instructor owns. All
+// writes go through the service_role client, which is why the browser
+// never needs write access to session / attendance / mode tables.
+//
+// A section is identified by (course_stubcode, course_type): the same
+// number may exist as both a lecture and a lab.
+//
+// Actions:
+//   start_attendance  open the room's 'attend' mode: create (or reuse)
+//                     today's class_session, pre-generate absent
+//                     attendance rows, then open the mode
+//   start_enrollment  open the room's 'enroll' mode (no session)
+//   close_session     close the session and drop the room's mode
+
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function manilaDateISO(): string {
+  return new Date(Date.now() + MANILA_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function manilaISODay(): number {
+  const day = new Date(Date.now() + MANILA_OFFSET_MS).getUTCDay();
+  return day === 0 ? 7 : day; // 1 = Monday ... 7 = Sunday
+}
+
+type CourseType = "lect" | "lab";
+
+function parseCourseType(value: unknown): CourseType | null {
+  return value === "lect" || value === "lab" ? value : null;
+}
+
+interface RequestBody {
+  action?: string;
+  course_stubcode?: number | string;
+  course_type?: string;
+  device_id?: string;
+  room?: string;
+  session_id?: string | null;
+}
 
 Deno.serve(async (req) => {
-  const { action, stub_code, room, session_id, course_id } = await req.json();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
+  // Identify the caller from the request JWT.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const caller = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: userData } = await caller.auth.getUser();
+  const user = userData?.user;
+  if (!user) return json({ error: "unauthorized" }, 401);
 
-  // Basic authorization: the instructor must own this stubcode
-  const { data: stub, error: stubErr } = await supabase
-    .from("stubcodes")
-    .select("instructor_id")
-    .eq("course_stubcode", stub_code)
-    .single();
-
-  if (stubErr || !stub || stub.instructor_id !== Deno.env.get("SUPABASE_INSTRUCTOR_ID")) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 403 });
+  let body: RequestBody;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "invalid json" }, 400);
   }
 
-  switch (action) {
+  const admin: SupabaseClient = createClient(supabaseUrl, serviceKey);
+  const courseStubcode = Number(body.course_stubcode);
+  const courseType = parseCourseType(body.course_type);
+
+  // The instructor owns a section directly, or is listed as a co-teacher.
+  const owns = async (
+    stubcode: number,
+    type: CourseType
+  ): Promise<boolean> => {
+    if (!Number.isInteger(stubcode)) return false;
+    const { data: stub } = await admin
+      .from("stubcodes")
+      .select("instructor_id")
+      .eq("course_stubcode", stubcode)
+      .eq("course_type", type)
+      .maybeSingle();
+    if (stub?.instructor_id === user.id) return true;
+    const { data: co } = await admin
+      .from("stubcode_instructors")
+      .select("instructor_id")
+      .eq("course_stubcode", stubcode)
+      .eq("course_type", type)
+      .eq("instructor_id", user.id)
+      .maybeSingle();
+    return Boolean(co);
+  };
+
+  // The room comes from the calling terminal's registration, never from
+  // a client-supplied string other than as an explicit fallback.
+  let room = body.room ?? null;
+  if (!room && body.device_id) {
+    const { data: device } = await admin
+      .from("devices")
+      .select("room")
+      .eq("device_id", body.device_id)
+      .maybeSingle();
+    room = (device?.room as string | null) ?? null;
+  }
+
+  switch (body.action) {
     case "start_enrollment": {
-      // Flow 2: OPEN ENROLLMENT
-      // INSERT INTO room_modes (room, mode, course_stubcode, session_id)
-      // VALUES (:room, 'enroll', :stubcode, NULL).
-      // If a row for this room already exists, fail with "room busy".
-      const { error: modeErr } = await supabase.from("room_modes").insert({
+      if (!courseType) return json({ error: "course_type is required" }, 400);
+      if (!(await owns(courseStubcode, courseType))) {
+        return json({ error: "forbidden" }, 403);
+      }
+      if (!room) return json({ error: "terminal is not assigned to a room" }, 409);
+
+      const { data: busy } = await admin
+        .from("room_modes")
+        .select("mode, course_stubcode")
+        .eq("room", room)
+        .maybeSingle();
+      if (busy) return json({ error: "room busy" }, 409);
+
+      const { data: sectionBusy } = await admin
+        .from("room_modes")
+        .select("room")
+        .eq("course_stubcode", courseStubcode)
+        .eq("course_type", courseType)
+        .maybeSingle();
+      if (sectionBusy) {
+        return json({ error: "this section already has an open mode" }, 409);
+      }
+
+      const { error } = await admin.from("room_modes").insert({
         room,
-        mode: 'enroll',
-        course_stubcode: stub_code,
+        mode: "enroll",
+        course_stubcode: courseStubcode,
+        course_type: courseType,
         session_id: null,
       });
-      if (modeErr && modeErr.code === '23505') {
-        // PK violation — room already has a mode
-        return new Response(JSON.stringify({ error: "room busy", active_mode: modeErr.detail }), {
-          status: 409
-        });
-      }
-      if (modeErr) throw modeErr;
-      return new Response(JSON.stringify({ status: "ack" }), { status: 200 });
+      if (error) return json({ error: error.message }, 409);
+
+      return json({ ok: true, room, session_id: null });
     }
 
     case "start_attendance": {
-      // Flow 4: START ATTENDANCE (one transaction):
-      // 1. INSERT class_sessions (stubcode_schedule_id, course_stubcode,
-      //    session_date = today in Asia/Manila).
-      //    On conflict: existing open (closed_at IS NULL) -> reuse it (resume).
-      //              existing closed -> reject. Reopening is OUT OF SCOPE.
-      // 2. Generate attendance rows from masterlist (all default 'absent',
-      //    timestamp NULL):
-      //    INSERT INTO attendance (session_id, enrollment_id, course_stubcode)
-      //    SELECT :session_id, enrollment_id, course_stubcode
-      //    FROM enrollments
-      //    WHERE course_stubcode = :stubcode AND dropped_at IS NULL
-      //    ON CONFLICT (session_id, enrollment_id) DO NOTHING;
-      // 3. INSERT room_modes (room, 'attend', :stubcode, :session_id).
+      if (!courseType) return json({ error: "course_type is required" }, 400);
+      if (!(await owns(courseStubcode, courseType))) {
+        return json({ error: "forbidden" }, 403);
+      }
+      if (!room) return json({ error: "terminal is not assigned to a room" }, 409);
 
-      const today = new Date();
-      const todayIso = today.toISOString().split('T')[0];
+      // Prefer today's slot; fall back to the section's earliest one so
+      // an instructor can open a session a little early or late.
+      let { data: slot } = await admin
+        .from("stubcode_schedules")
+        .select("stubcode_schedule_id")
+        .eq("course_stubcode", courseStubcode)
+        .eq("course_type", courseType)
+        .eq("schedule_day", manilaISODay())
+        .order("schedule_start")
+        .limit(1)
+        .maybeSingle();
 
-      // Step 1: INSERT class_session
-      const { error: sesErr } = await supabase.from("class_sessions").insert({
-        stubcode_schedule_id: session_id,
-        course_stubcode: stub_code,
-        session_date: todayIso,
-        closed_at: null,
-      }).onConflict('class_sessions_slot_date_key').doNothing();
-
-      if (sesErr) {
-        // Existing session open (closed_at IS NULL) -> reuse it (resume)
-        // Existing session closed -> reject
-        return new Response(JSON.stringify({ error: "session already active or closed" }), { status: 409 });
+      if (!slot) {
+        const { data: fallback } = await admin
+          .from("stubcode_schedules")
+          .select("stubcode_schedule_id")
+          .eq("course_stubcode", courseStubcode)
+          .eq("course_type", courseType)
+          .order("schedule_day")
+          .order("schedule_start")
+          .limit(1)
+          .maybeSingle();
+        slot = fallback;
+      }
+      if (!slot) {
+        return json({ error: "this section has no schedule to attend" }, 409);
       }
 
-      // Step 2: Generate attendance rows from masterlist
-      const { error: attErr } = await supabase.from("attendance").insert({
-        select: `
-          session_id, enrollment_id, course_stubcode
-          FROM enrollments
-          WHERE course_stubcode = ${stub_code} AND dropped_at IS NULL
-        `,
-        count: "exact",
-      }).onConflict('attendance_session_enrollment_key').doNothing();
+      const sessionDate = manilaDateISO();
 
-      if (attErr) throw attErr;
+      const { data: existingSession } = await admin
+        .from("class_sessions")
+        .select("session_id, closed_at")
+        .eq("stubcode_schedule_id", slot.stubcode_schedule_id)
+        .eq("session_date", sessionDate)
+        .maybeSingle();
 
-      // Step 3: INSERT room_modes (room, 'attend', :stubcode, :session_id)
-      const { error: modeErr } = await supabase.from("room_modes").insert({
-        room,
-        mode: 'attend',
-        course_stubcode: stub_code,
-        session_id: session_id,
-      });
-      if (modeErr && modeErr.code === '23505') {
-        // Room already has a mode; the session was already started
-        return new Response(JSON.stringify({ status: "resumed" }), { status: 200 });
+      if (existingSession?.closed_at) {
+        return json({ error: "today's session for this slot is already closed" }, 409);
       }
-      if (modeErr) throw modeErr;
 
-      return new Response(JSON.stringify({ status: "ack" }), { status: 200 });
+      let sessionId = (existingSession?.session_id as string | undefined) ?? null;
+
+      if (!sessionId) {
+        const { data: created, error: createError } = await admin
+          .from("class_sessions")
+          .insert({
+            stubcode_schedule_id: slot.stubcode_schedule_id,
+            course_stubcode: courseStubcode,
+            course_type: courseType,
+            session_date: sessionDate,
+          })
+          .select("session_id")
+          .single();
+        if (createError || !created) {
+          return json({ error: createError?.message ?? "could not open session" }, 409);
+        }
+        sessionId = created.session_id as string;
+
+        // Pre-generate one absent row per enrolled student; a tap
+        // updates its row rather than inserting a new one.
+        const { data: enrolled } = await admin
+          .from("enrollments")
+          .select("enrollment_id")
+          .eq("course_stubcode", courseStubcode)
+          .eq("course_type", courseType)
+          .is("dropped_at", null);
+
+        if (enrolled && enrolled.length > 0) {
+          await admin.from("attendance").upsert(
+            enrolled.map((row) => ({
+              session_id: sessionId,
+              enrollment_id: row.enrollment_id,
+              course_stubcode: courseStubcode,
+              course_type: courseType,
+            })),
+            { onConflict: "session_id,enrollment_id", ignoreDuplicates: true }
+          );
+        }
+      }
+
+      const { data: existingMode } = await admin
+        .from("room_modes")
+        .select("room, session_id")
+        .eq("room", room)
+        .maybeSingle();
+
+      if (existingMode && existingMode.session_id !== sessionId) {
+        return json({ error: "room busy" }, 409);
+      }
+
+      if (!existingMode) {
+        const { error: modeError } = await admin.from("room_modes").insert({
+          room,
+          mode: "attend",
+          course_stubcode: courseStubcode,
+          course_type: courseType,
+          session_id: sessionId,
+        });
+        if (modeError) return json({ error: modeError.message }, 409);
+      }
+
+      return json({ ok: true, room, session_id: sessionId });
     }
 
     case "close_session": {
-      // Flow 6: CLOSE SESSION (ONE transaction):
-      // UPDATE class_sessions SET closed_at = now()
-      //   WHERE session_id = :id AND closed_at IS NULL;
-      // DELETE FROM room_modes WHERE session_id = :id;
-      // Attendance rows stay.
+      const sessionId = body.session_id ?? null;
 
-      // 1. Close the session
-      const { error: closeErr } = await supabase.from("class_sessions")
-        .update({ closed_at: new Date() })
-        .eq("session_id", session_id)
-        .eq("closed_at", null);
+      if (sessionId) {
+        const { data: session } = await admin
+          .from("class_sessions")
+          .select("course_stubcode, course_type")
+          .eq("session_id", sessionId)
+          .maybeSingle();
+        if (
+          session &&
+          !(await owns(
+            session.course_stubcode as number,
+            session.course_type as CourseType
+          ))
+        ) {
+          return json({ error: "forbidden" }, 403);
+        }
 
-      if (closeErr) {
-        // Existing session already closed -> reject. Reopening is OUT OF SCOPE.
-        return new Response(JSON.stringify({ error: "session already closed" }), { status: 409 });
+        await admin
+          .from("class_sessions")
+          .update({ closed_at: new Date().toISOString() })
+          .eq("session_id", sessionId)
+          .is("closed_at", null);
+        await admin.from("room_modes").delete().eq("session_id", sessionId);
+        return json({ ok: true });
       }
 
-      // 2. Delete room_modes row for this session
-      await supabase.from("room_modes").delete().eq("session_id", session_id);
-
-      return new Response(JSON.stringify({ status: "ack" }), { status: 200 });
+      // Registration mode has no session; close it by room.
+      if (!room) return json({ error: "nothing to close" }, 409);
+      const { data: mode } = await admin
+        .from("room_modes")
+        .select("course_stubcode, course_type")
+        .eq("room", room)
+        .maybeSingle();
+      if (
+        mode &&
+        !(await owns(
+          mode.course_stubcode as number,
+          mode.course_type as CourseType
+        ))
+      ) {
+        return json({ error: "forbidden" }, 403);
+      }
+      await admin.from("room_modes").delete().eq("room", room);
+      return json({ ok: true });
     }
 
     default:
-      return new Response(JSON.stringify({ error: "unknown action" }), { status: 400 });
+      return json({ error: "unknown action" }, 400);
   }
 });

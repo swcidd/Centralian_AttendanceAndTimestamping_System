@@ -1,20 +1,27 @@
 import { CgClose } from "react-icons/cg";
+import type { CourseSection, CourseType } from "../../types/types";
+import { sectionKey, sectionLabel } from "../../lib/utils/section";
 
 interface CourseCardProps {
-  stubs: string[];
+  sections: CourseSection[];
   name: string;
   schedule: string;
   instructor: string;
   deviceMac: string | null;
   roomName: string | null;
   onAddStub: () => void;
-  onDeleteStub: (stub: string) => void;
+  onDeleteStub: (section: CourseSection) => void;
   onAssign: () => void;
   onDelete: () => void;
 }
 
+const TYPE_LABEL: Record<CourseType, string> = {
+  lect: "Lecture",
+  lab: "Laboratory",
+};
+
 const CourseCard = ({
-  stubs,
+  sections,
   name,
   schedule,
   instructor,
@@ -30,16 +37,20 @@ const CourseCard = ({
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-orange text-sm font-medium">Stubs:</span>
-          {stubs.map((stub) => (
+          {sections.map((section) => (
             <span
-              key={stub}
+              key={sectionKey(section)}
+              title={TYPE_LABEL[section.type]}
               className="bg-orange/10 text-orange inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs font-medium"
             >
-              {stub}
+              {section.code}
+              <span className="text-orange/70 font-sans text-[10px] font-semibold uppercase">
+                {section.type}
+              </span>
               <button
                 type="button"
-                onClick={() => onDeleteStub(stub)}
-                aria-label={`Delete stubcode ${stub}`}
+                onClick={() => onDeleteStub(section)}
+                aria-label={`Delete stubcode ${sectionLabel(section)}`}
                 title="Delete stubcode"
                 className="text-orange/60 transition hover:text-red-600"
               >

@@ -57,6 +57,11 @@ class EncoderHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # Chrome's Private Network Access: an HTTPS page (e.g. the Pages
+        # deployment) reaching http://localhost:8787 is a public->private
+        # request — the preflight must be answered with this header or
+        # the browser blocks the call even though CORS otherwise passes.
+        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Cache-Control", "no-store")
 
     def _send_json(self, status: int, payload: dict):

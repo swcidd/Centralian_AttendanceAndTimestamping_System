@@ -1,6 +1,6 @@
-// PSK-HMAC verification shared by every device-facing Edge Function
-// (ingest-tap, poll-commands). One place for the anti-spoofing logic
-// so a future fix doesn't have to land in two functions in lockstep.
+// PSK-HMAC verification for the device-facing Edge Function
+// (ingest-tap). One place for the anti-spoofing logic so it stays in
+// lockstep with the firmware signer.
 
 const MAX_CLOCK_SKEW_SECONDS = 30;
 

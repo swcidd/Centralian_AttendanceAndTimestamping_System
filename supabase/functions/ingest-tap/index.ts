@@ -1,8 +1,25 @@
-import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+// ingest-tap — the ESP32/PN532 scan endpoint.
+//
+// The device authenticates with a global PSK-HMAC (it has no Supabase
+// session), so this function runs with verify_jwt = false. The room is
+// derived server-side from the calling device's MAC: the browser can
+// never tell the backend "this tap happened in room X".
+//
+// The tap is resolved against the room's current mode, which names the
+// section as (course_stubcode, course_type):
+//   enroll  → the first tap of an encoded card creates Student + Card +
+//             Enrollment (this is the registration flow)
+//   attend  → the tap stamps the pre-generated absent attendance row
+//             Present or Late
+//
+// Every request writes one scan_logs row, whatever the outcome.
+
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { isClockSkewValid, verifyDeviceSignature } from "../_shared/deviceAuth.ts";
 
 const PSK = Deno.env.get("DEVICE_PSK")!;
-const UNIQUE_VIOLATION = "23505";
+
+type CourseType = "lect" | "lab";
 
 interface TapPayload {
   device_mac: string;
@@ -16,321 +33,307 @@ interface TapPayload {
   };
 }
 
+type ScanResult =
+  | "ok"
+  | "unknown_card"
+  | "not_enrolled"
+  | "no_active_mode"
+  | "duplicate"
+  | "rejected";
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// The campus runs on Asia/Manila (UTC+8, no DST).
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function manilaNow(): Date {
+  return new Date(Date.now() + MANILA_OFFSET_MS);
+}
+
+function manilaMinutesOfDay(): number {
+  const now = manilaNow();
+  return now.getUTCHours() * 60 + now.getUTCMinutes();
+}
+
+function manilaDateISO(): string {
+  return manilaNow().toISOString().slice(0, 10);
+}
+
+function manilaISODay(): number {
+  const day = manilaNow().getUTCDay();
+  return day === 0 ? 7 : day; // 1 = Monday ... 7 = Sunday
+}
+
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
 Deno.serve(async (req) => {
-  const payload: TapPayload = await req.json();
+  let payload: TapPayload;
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: "invalid json" }, 400);
+  }
 
   if (!isClockSkewValid(payload.timestamp)) {
-    return new Response(JSON.stringify({ error: "clock skew too large" }), {
-      status: 401,
-    });
+    return json({ error: "clock skew too large" }, 401);
   }
 
   const message = `${payload.device_mac}${payload.timestamp}${payload.nfc_uid}`;
   const validSignature = await verifyDeviceSignature(PSK, message, payload.signature);
   if (!validSignature) {
-    return new Response(JSON.stringify({ error: "invalid signature" }), {
-      status: 401,
-    });
+    return json({ error: "invalid signature" }, 401);
   }
 
-  const supabase = createClient(
+  // The card UID is compared against student_cards, so normalise it to
+  // the same canonical form regardless of how the terminal formatted it.
+  const nfcUid = (payload.nfc_uid ?? "")
+    .replace(/[^0-9a-fA-F]/g, "")
+    .toUpperCase();
+
+  const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // 1. Look up the session for this device
-  const { data: session, error: sessionError } = await supabase
-    .from("active_sessions")
-    .select("session_id, stub_code, started_at, status")
-    .eq("device_mac", payload.device_mac)
-    .single();
-
-  if (sessionError) {
-    return new Response(JSON.stringify({ error: sessionError.message }), {
-      status: 500,
+  const logScan = async (fields: {
+    result: ScanResult;
+    room: string;
+    mode?: "enroll" | "attend" | null;
+    student_id?: string | null;
+    course_stubcode?: number | null;
+    course_type?: CourseType | null;
+    session_id?: string | null;
+  }) => {
+    await admin.from("scan_logs").insert({
+      room: fields.room,
+      nfc_uid: nfcUid,
+      mode: fields.mode ?? null,
+      result: fields.result,
+      student_id: fields.student_id ?? null,
+      course_stubcode: fields.course_stubcode ?? null,
+      course_type: fields.course_type ?? null,
+      session_id: fields.session_id ?? null,
     });
-  }
-  if (!session) {
-    return new Response(
-      JSON.stringify({ error: "no active session for this device" }),
-      { status: 409 }
-    );
-  }
+  };
 
-  // 2. Derive the room from the device (MAC → devices table → room)
-  const { data: deviceRow, error: deviceErr } = await supabase
+  // 1. Which room is this terminal in?
+  const { data: device } = await admin
     .from("devices")
     .select("room")
     .eq("device_id", payload.device_mac)
-    .single();
+    .maybeSingle();
 
-  if (deviceErr || !deviceRow) {
-    // Device not registered; treat as no active mode
-    await supabase.from("scan_logs").insert({
-      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-      room: payload.device_mac,
-      nfc_uid: payload.nfc_uid,
-      mode: null,
-      result: 'no_active_mode',
-      student_id: null,
-      course_stubcode: session.stub_code,
-      session_id: session.session_id,
-    });
-    return 'no_active_mode';
+  if (!device?.room) {
+    await logScan({ room: "unknown", result: "rejected" });
+    return json({ error: "unregistered device" }, 403);
   }
-  const deviceRoom = deviceRow.room;
+  const room = device.room as string;
 
-  // 3. Look up the current room mode
-  const { data: modeRow, error: modeErr } = await supabase
+  // 2. Is the room in a mode at all?
+  const { data: mode } = await admin
     .from("room_modes")
-    .select("mode, session_id, course_stubcode")
-    .eq("room", deviceRoom)
-    .single();
+    .select("mode, course_stubcode, course_type, session_id")
+    .eq("room", room)
+    .maybeSingle();
 
-  // 4. Execute the appropriate flow
-  let result: string;
+  if (!mode) {
+    await logScan({ room, result: "no_active_mode" });
+    return json({ result: "no_active_mode" });
+  }
 
-  if (session.status === "REGISTRATION") {
-    // Flow 2: open enrollment is handled via the dedicated registration
-    // path; for a tap during registration, just acknowledge.
-    result = 'ok';
-  } else if (modeRow?.mode === 'enroll') {
-    // --- Flow 3: SCAN WHILE room mode = 'enroll' ---
-    // 1. Resolve the student from the card
-    const { data: studentCard, error: studentErr } = await supabase
-      .from("student_cards")
-      .select("student_id, revoked_at")
-      .eq("nfc_uid", payload.nfc_uid)
-      .single();
+  const courseStubcode = mode.course_stubcode as number;
+  const courseType = mode.course_type as CourseType;
+  const modeType = mode.mode as "enroll" | "attend";
 
-    if (studentErr || !studentCard || studentCard.revoked_at !== null) {
-      // Write scan_logs row for unknown/unrevoked card
-      await supabase.from("scan_logs").insert({
-        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-        room: deviceRoom,
-        nfc_uid: payload.nfc_uid,
-        mode: null,
-        result: 'unknown_card',
-        student_id: null,
-        course_stubcode: session.stub_code,
-        session_id: session.session_id,
-      });
-      return 'unknown_card';
+  // 3. Which student does this card belong to, if any?
+  const { data: card } = await admin
+    .from("student_cards")
+    .select("student_id")
+    .eq("nfc_uid", nfcUid)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  let studentId: string | null = (card?.student_id as string | undefined) ?? null;
+
+  // 4. enrollment mode
+  if (modeType === "enroll") {
+    let created = false;
+
+    // A card written by the encoder carries the student's details, so
+    // the very first tap creates the record; a card the system has never
+    // seen and that carries no payload cannot be enrolled.
+    if (!studentId && payload.student_info) {
+      const info = payload.student_info;
+      const { error: studentError } = await admin.from("students").upsert(
+        {
+          student_id: info.school_id,
+          student_firstname: info.first_name,
+          student_lastname: info.last_name,
+        },
+        { onConflict: "student_id" }
+      );
+      if (!studentError) {
+        studentId = info.school_id;
+        await admin.from("student_cards").insert({
+          student_id: info.school_id,
+          nfc_uid: nfcUid,
+        });
+        created = true;
+      }
     }
 
-    const studentId = studentCard.student_id;
+    if (!studentId) {
+      await logScan({ room, result: "unknown_card", mode: modeType });
+      return json({ result: "unknown_card" });
+    }
 
-    // 2. Look for an enrollment with the same (course_stubcode, student_id)
-    const { data: existingEnrollment, error: enrollErr } = await supabase
+    const { data: existing } = await admin
       .from("enrollments")
-      .select("*")
-      .eq("course_stubcode", session.stub_code)
+      .select("enrollment_id, dropped_at")
+      .eq("course_stubcode", courseStubcode)
+      .eq("course_type", courseType)
       .eq("student_id", studentId)
-      .single();
+      .maybeSingle();
 
-    if (enrollErr && enrollErr.code !== UNIQUE_VIOLATION) {
-      // Insert new enrollment
-      const { error: insertErr } = await supabase.from("enrollments").insert({
-        course_stubcode: session.stub_code,
+    if (existing && existing.dropped_at === null) {
+      await logScan({
+        room,
+        result: "duplicate",
+        mode: modeType,
         student_id: studentId,
+        course_stubcode: courseStubcode,
+        course_type: courseType,
       });
-      if (insertErr) throw insertErr;
-      // Backfill open sessions for this stubcode
-      const { data: newEnrollment } = await supabase
+      return json({ result: "duplicate" });
+    }
+
+    if (existing) {
+      await admin
         .from("enrollments")
-        .select("enrollment_id")
-        .eq("course_stubcode", session.stub_code)
-        .eq("student_id", studentId)
-        .single();
-      await supabase.from("attendance").insert({
-        session_id: session.session_id,
-        enrollment_id: newEnrollment.enrollment_id,
-        course_stubcode: session.stub_code,
-      });
-      return 'ok';
-    }
-
-    // Existing enrollment found
-    if (existingEnrollment.dropped_at !== null) {
-      // Re-activate: clear dropped_at
-      await supabase.from("enrollments")
-        .update({ dropped_at: null })
-        .eq("enrollment_id", existingEnrollment.enrollment_id);
-      // Backfill open sessions
-      await supabase.from("attendance").insert({
-        session_id: session.session_id,
-        enrollment_id: existingEnrollment.enrollment_id,
-        course_stubcode: session.stub_code,
-      });
-      return 'ok';
-    }
-
-    // Existing active enrollment — duplicate tap
-    return 'duplicate';
-  } else if (modeRow?.mode === 'attend') {
-    // --- Flow 5: SCAN WHILE room mode = 'attend' ---
-    // 1. room_modes by room -> session_id and course_stubcode (already done)
-    const attendSessionId = modeRow.session_id;
-    const attendCourseStubcode = modeRow.course_stubcode;
-
-    // 2. Resolve the student from the card
-    const { data: studentCard, error: studentErr } = await supabase
-      .from("student_cards")
-      .select("student_id")
-      .eq("nfc_uid", payload.nfc_uid)
-      .single();
-
-    if (studentErr || !studentCard) {
-      await supabase.from("scan_logs").insert({
-        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-        room: deviceRoom,
-        nfc_uid: payload.nfc_uid,
-        mode: 'attend',
-        result: 'unknown_card',
-        student_id: null,
-        course_stubcode: attendCourseStubcode,
-        session_id: attendSessionId,
-      });
-      return 'unknown_card';
-    }
-
-    const studentId = studentCard.student_id;
-
-    // 3. Find the enrollment: course_stubcode + student_id + dropped_at IS NULL
-    const { data: enrollment, error: enrollErr } = await supabase
-      .from("enrollments")
-      .select("*")
-      .eq("course_stubcode", attendCourseStubcode)
-      .eq("student_id", studentId)
-      .eq("dropped_at", null)
-      .single();
-
-    if (enrollErr || !enrollment) {
-      // Not enrolled — do not touch attendance
-      await supabase.from("scan_logs").insert({
-        scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-        room: deviceRoom,
-        nfc_uid: payload.nfc_uid,
-        mode: 'attend',
-        result: 'not_enrolled',
+        .update({ dropped_at: null, enrolled_at: new Date().toISOString() })
+        .eq("enrollment_id", existing.enrollment_id);
+    } else {
+      await admin.from("enrollments").insert({
+        course_stubcode: courseStubcode,
+        course_type: courseType,
         student_id: studentId,
-        course_stubcode: attendCourseStubcode,
-        session_id: attendSessionId,
       });
-      return 'not_enrolled';
     }
 
-    // 4. Compute status from server time (Asia/Manila)
-    const tapTime = new Date(payload.timestamp * 1000);
-    const tz = 'Asia/Manila';
-    const tapLocalMs = tapTime.toLocaleString('en-US', { timeZone: tz }, undefined).replace(/[^\d]/g, '') * 1; // hack: get epoch ms
-    // Actually let me do this properly:
-    const tapDateStr = new Date(payload.timestamp * 1000).toLocaleString('en-US', { timeZone: tz });
-    const tapTimeParts = tapDateStr.split(' ');
-    const tapTimePart = tapTimeParts[tapTimeParts.length - 1]; // HH:MM:SS or similar
-    const tapHourMin = tapTimePart.split(':');
-    const tapMinutes = parseInt(tapHourMin[0]) * 60 + parseInt(tapHourMin[1]);
-
-    // Get the schedule slot for this session
-    const { data: schedule, error: schedErr } = await supabase
-      .from("stubcode_schedules")
-      .select("late_after_minutes, absent_after_minutes, schedule_start, schedule_end")
-      .eq("course_stubcode", attendCourseStubcode)
-      .single();
-
-  if (schedErr || !schedule) {
-    await supabase.from("scan_logs").insert({
-      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-      room: deviceRoom,
-      nfc_uid: payload.nfc_uid,
-      mode: 'attend',
-      result: 'rejected',
+    await logScan({
+      room,
+      result: "ok",
+      mode: modeType,
       student_id: studentId,
-      course_stubcode: attendCourseStubcode,
-      session_id: attendSessionId,
+      course_stubcode: courseStubcode,
+      course_type: courseType,
     });
-    return 'rejected';
+    return json({ result: "ok", enrolled: true, created });
   }
 
-  // Compute tap time as minutes after midnight in Asia/Manila
-  // Parse the local time string
-  const tapDate = new Date(payload.timestamp * 1000);
-  const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' };
-  const tapLocal = tapDate.toLocaleTimeString('en-CA', options); // HH:MM
-  const tapHmParts = tapLocal.split(':');
-  const tapMins = parseInt(tapHmParts[0]) * 60 + parseInt(tapHmParts[1]);
-
-  // Schedule start as minutes after midnight
-  const startParts = schedule.schedule_start.split(':');
-  const scheduleStartMins = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
-
-  // Strictly greater than comparisons
-  const lateThreshold = scheduleStartMins + schedule.late_after_minutes;
-  const absentThreshold = scheduleStartMins + schedule.absent_after_minutes;
-
-  let status: 'present' | 'late' | 'absent';
-  if (tapMins >= absentThreshold) {
-    status = 'absent';
-  } else if (tapMins >= lateThreshold) {
-    status = 'late';
-  } else {
-    status = 'present';
+  // 5. attendance mode
+  if (!studentId) {
+    await logScan({ room, result: "unknown_card", mode: modeType });
+    return json({ result: "unknown_card" });
   }
 
-  // 5. First tap wins; never overwrite an instructor-set row:
-  const { error: updateErr } = await supabase.from("attendance").update({
-    status,
-    attendance_timestamp: new Date().toISOString(),
-  }).eq("session_id", attendSessionId)
+  const { data: enrollment } = await admin
+    .from("enrollments")
+    .select("enrollment_id")
+    .eq("course_stubcode", courseStubcode)
+    .eq("course_type", courseType)
+    .eq("student_id", studentId)
+    .is("dropped_at", null)
+    .maybeSingle();
+
+  if (!enrollment) {
+    await logScan({
+      room,
+      result: "not_enrolled",
+      mode: modeType,
+      student_id: studentId,
+      course_stubcode: courseStubcode,
+      course_type: courseType,
+    });
+    return json({ result: "not_enrolled" });
+  }
+
+  // Present vs Late comes from the session's schedule slot.
+  const { data: session } = await admin
+    .from("class_sessions")
+    .select("session_id, stubcode_schedules(schedule_start, late_after_minutes)")
+    .eq("session_id", mode.session_id)
+    .maybeSingle();
+  const schedule = (session?.stubcode_schedules ?? null) as
+    | { schedule_start: string; late_after_minutes: number }
+    | null;
+  const delayMinutes = schedule
+    ? manilaMinutesOfDay() - timeToMinutes(schedule.schedule_start)
+    : 0;
+  const attendanceStatus =
+    schedule && delayMinutes > schedule.late_after_minutes ? "late" : "present";
+
+  const { data: attendanceRow } = await admin
+    .from("attendance")
+    .select("attendance_id, status")
+    .eq("session_id", mode.session_id)
     .eq("enrollment_id", enrollment.enrollment_id)
-    .eq("attendance_timestamp", null)
-    .eq("source", 'system');
+    .maybeSingle();
 
-  if (updateErr && updateErr.code !== UNIQUE_VIOLATION) {
-    // 0 rows updated -> 'duplicate' (someone already tapped)
-    await supabase.from("scan_logs").insert({
-      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-      room: deviceRoom,
-      nfc_uid: payload.nfc_uid,
-      mode: 'attend',
-      result: 'duplicate',
+  if (
+    attendanceRow &&
+    (attendanceRow.status === "present" || attendanceRow.status === "late")
+  ) {
+    await logScan({
+      room,
+      result: "duplicate",
+      mode: modeType,
       student_id: studentId,
-      course_stubcode: attendCourseStubcode,
-      session_id: attendSessionId,
+      course_stubcode: courseStubcode,
+      course_type: courseType,
+      session_id: mode.session_id,
     });
-    return 'duplicate';
+    return json({ result: "duplicate", attendance_status: attendanceRow.status });
   }
 
-  // 1 row updated -> 'ok'
-  await supabase.from("scan_logs").insert({
-    scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-    room: deviceRoom,
-    nfc_uid: payload.nfc_uid,
-    mode: 'attend',
-    result: 'ok',
-    student_id: studentId,
-    course_stubcode: attendCourseStubcode,
-    session_id: attendSessionId,
-  });
-
-  return 'ok';
+  if (attendanceRow) {
+    await admin
+      .from("attendance")
+      .update({
+        status: attendanceStatus,
+        attendance_timestamp: new Date().toISOString(),
+        source: "system",
+      })
+      .eq("attendance_id", attendanceRow.attendance_id);
   } else {
-    // No room_modes row -> no active mode
-    await supabase.from("scan_logs").insert({
-      scanned_at: new Date(payload.timestamp * 1000).toISOString(),
-      room: deviceRoom,
-      nfc_uid: payload.nfc_uid,
-      mode: null,
-      result: 'no_active_mode',
-      student_id: null,
-      course_stubcode: session.stub_code,
-      session_id: session.session_id,
+    await admin.from("attendance").insert({
+      session_id: mode.session_id,
+      enrollment_id: enrollment.enrollment_id,
+      course_stubcode: courseStubcode,
+      course_type: courseType,
+      status: attendanceStatus,
+      attendance_timestamp: new Date().toISOString(),
+      source: "system",
     });
-    return 'no_active_mode';
   }
 
-  // 5. Return result to firmware
-  return new Response(JSON.stringify({ result, attendance_status: result }), {
-    status: 201,
+  await logScan({
+    room,
+    result: "ok",
+    mode: modeType,
+    student_id: studentId,
+    course_stubcode: courseStubcode,
+    course_type: courseType,
+    session_id: mode.session_id,
   });
+
+  return json({ result: "ok", attendance_status: attendanceStatus });
 });

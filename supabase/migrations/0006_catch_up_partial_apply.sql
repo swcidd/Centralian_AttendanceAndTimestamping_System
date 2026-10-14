@@ -1,18 +1,7 @@
--- ============================================================
--- 0006_catch_up_partial_apply.sql
--- The remote database has migration 0001 applied but 0002–0005
--- were never recorded as applied (migration tracking table
--- has no rows for them), even though 0002 was partially
--- applied manually — Late_After_Minutes already exists.
---
--- This migration idempotently applies everything from 0002–0005
--- that may be missing, using IF NOT EXISTS / OR REPLACE / IF EXISTS
--- so it's safe to run on any state of the remote DB.
--- ============================================================
+-- Idempotently applies anything from 0002-0005 missing on the remote DB
+-- (0002-0005 were never recorded as applied there). IF NOT EXISTS /
+-- OR REPLACE / IF EXISTS keep this safe on any state of the remote DB.
 
--- ==================== From 0002 ====================
-
--- 1. Threshold columns (Late_After_Minutes may already exist)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -23,11 +12,9 @@ BEGIN
     END IF;
 END $$;
 
--- 2. Make NFC_UID/Device_MAC nullable for ABSENT rows
 ALTER TABLE Attendance_Logs ALTER COLUMN NFC_UID DROP NOT NULL;
 ALTER TABLE Attendance_Logs ALTER COLUMN Device_MAC DROP NOT NULL;
 
--- 3. Check constraint: ABSENT rows have no UID, all others must
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -39,7 +26,6 @@ BEGIN
     END IF;
 END $$;
 
--- 4. Partial unique index: one attendance row per student per session
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -52,7 +38,6 @@ BEGIN
     END IF;
 END $$;
 
--- 5. finalize_absences() function (CREATE OR REPLACE is idempotent)
 CREATE OR REPLACE FUNCTION public.finalize_absences()
 RETURNS void
 LANGUAGE plpgsql
@@ -86,27 +71,17 @@ BEGIN
 END;
 $$;
 
--- 6. pg_cron extension + schedule
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
 SELECT cron.schedule('finalize-absences', '* * * * *', 'SELECT public.finalize_absences();');
 
--- ==================== From 0003 ====================
-
--- Drop columns that may or may not exist
 ALTER TABLE Students DROP COLUMN IF EXISTS Course_Program;
 ALTER TABLE Students DROP COLUMN IF EXISTS Year_Level;
 ALTER TABLE Active_Sessions DROP COLUMN IF EXISTS Expires_At;
 
--- ==================== From 0004 ====================
-
--- Grants to authenticated role (safe to re-run)
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
 
--- ==================== From 0005 ====================
-
--- claim_next_device_command() function (CREATE OR REPLACE is idempotent)
 CREATE OR REPLACE FUNCTION public.claim_next_device_command(p_device_mac VARCHAR(50))
 RETURNS TABLE (command_id UUID, stub_code VARCHAR(20), command_type VARCHAR(30))
 LANGUAGE plpgsql

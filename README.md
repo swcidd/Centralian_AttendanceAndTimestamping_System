@@ -1,6 +1,18 @@
 # CATS — Centralian Attendance & Timestamping System
 
-An NFC-based university attendance system. Students tap a MIFARE Classic card on a wall-mounted ESP32-S3 + PN532 terminal; the firmware signs the tap and posts it to a Supabase backend, which records the student in an `attendance_logs` row for the currently-active session. A React + Vite dashboard (deployed to Cloudflare Pages) lets instructors manage courses, open/close attendance sessions, and watch the live roster update in real time.
+An NFC-based university attendance system. Students tap a MIFARE Classic card on a wall-mounted ESP32-S3 + PN532 terminal; the firmware signs the tap and posts it to a Supabase backend, which resolves it against the room's current mode and stamps the student's `attendance` row Present or Late (or enrolls them, during registration). A React + Vite dashboard (deployed to Cloudflare Pages) lets instructors manage courses, open/close attendance sessions, and watch the live roster update in real time.
+
+## Room modes
+
+Every terminal belongs to a room, and each room is in exactly one mode at a time (`room_modes` is keyed by room, so a room can't be double-booked):
+
+| Mode | Opened by | What a tap does |
+|---|---|---|
+| `enroll` | *Start registration* on the dashboard | First tap of an encoded card creates Student + Card + Enrollment |
+| `attend` | *Start session* on the dashboard | Stamps the pre-generated absent row Present or Late |
+| *(none)* | — | The tap is logged as `no_active_mode` and ignored |
+
+The room is derived server-side from the calling terminal's MAC, so the browser can never claim a tap happened somewhere else.
 
 ## Architecture
 
@@ -8,7 +20,7 @@ An NFC-based university attendance system. Students tap a MIFARE Classic card on
 ┌──────────────┐  tap    ┌───────────────────────┐   HTTP (HMAC)   ┌─────────────────────┐
 │ MIFARE card  │ ──────▶ │ ESP32-S3 + PN532       │ ──────────────▶ │ Supabase Edge Funcs  │
 │ (JSON payload│         │ terminal firmware      │                 │  ingest-tap          │
-│  + NFC UID)  │         │ (PlatformIO / Arduino) │                 │  poll-commands       │
+│  + NFC UID)  │         │ (PlatformIO / Arduino) │                 │  room-action         │
 └──────────────┘         └───────────────────────┘                 └──────────┬──────────┘
                                                                               │
                                                               ┌───────────────▼──────────────┐
@@ -24,8 +36,8 @@ An NFC-based university attendance system. Students tap a MIFARE Classic card on
 
 Three loosely-coupled pieces:
 
-1. **Firmware** (`firmware/`) — PlatformIO Arduino project for the ESP32-S3 terminal. Reads the student JSON off MIFARE Classic cards, validates the UID, signs taps with a pre-shared key, and POSTs them to `ingest-tap`. Can also poll `poll-commands` for session state.
-2. **Backend** (`supabase/`) — Supabase Postgres schema (RLS-protected) plus two Edge Functions, `ingest-tap` and `poll-commands`, authenticated by an HMAC-SHA256 pre-shared key.
+1. **Firmware** (`firmware/`) — PlatformIO Arduino project for the ESP32-S3 terminal. Reads the student JSON off MIFARE Classic cards, validates the UID, signs taps with a pre-shared key, and POSTs them to `ingest-tap`.
+2. **Backend** (`supabase/`) — Supabase Postgres schema (RLS-protected) plus two Edge Functions: `ingest-tap`, the device scan endpoint authenticated by an HMAC-SHA256 pre-shared key, and `room-action`, the instructor endpoint authenticated by the caller's Supabase JWT.
 3. **Dashboard** (`src/`) — React + Vite + TypeScript + Tailwind app (Snowpack/`cpu-cats`) deployed to Cloudflare Pages.
 
 ## Repository Layout
@@ -33,10 +45,10 @@ Three loosely-coupled pieces:
 ```
 ├── firmware/            # ESP32-S3 terminal firmware (PlatformIO)
 │   ├── include/         #   config.h (gitignored), config.h.example, pins.h
-│   └── src/             #   main.cpp, nfc.cpp, net.cpp, led.cpp, commands.cpp, ...
+│   └── src/             #   main.cpp, nfc.cpp, net.cpp, led.cpp, ...
 ├── supabase/
-│   ├── functions/       #   Edge Functions (ingest-tap, poll-commands, _shared)
-│   └── migrations/      #   SQL schema (0001-0011, snake_case)
+│   ├── functions/       #   Edge Functions (ingest-tap, room-action, _shared)
+│   └── migrations/      #   SQL schema (0001-0015, snake_case)
 ├── src/                 # React + Vite dashboard
 ├── tools/               # standalone card-encoding scripts
 ├── docs/                # project planning & card-encoding docs
@@ -77,18 +89,20 @@ The dashboard picks up realtime attendance via Supabase channels, so an open ses
 Apply migrations and deploy the Edge Functions.
 
 ```bash
-# migrations (0001-0011) define the snake_case schema + RLS
+# migrations (0001-0015) define the snake_case schema + RLS
 supabase db push --project-ref <project-ref>
 
-# deploy Edge Functions without JWT gate (device taps use PSK, not user auth)
+# ingest-tap is device-facing: PSK-HMAC, no JWT gate
 supabase functions deploy ingest-tap --project-ref <project-ref> --no-verify-jwt
-supabase functions deploy poll-commands --project-ref <project-ref> --no-verify-jwt
+
+# room-action is instructor-facing: keeps the default JWT gate
+supabase functions deploy room-action --project-ref <project-ref>
 
 # store the device pre-shared key as a secret
 supabase secrets set DEVICE_PSK=<shared-secret> --project-ref <project-ref>
 ```
 
-> The Edge Functions verify an HMAC-SHA256 signature computed from the device MAC + timestamp (+ NFC UID for taps) using `DEVICE_PSK`. This key must match the one compiled into firmware (`config.h`).
+> `ingest-tap` verifies an HMAC-SHA256 signature computed from the device MAC + timestamp + NFC UID using `DEVICE_PSK`. This key must match the one compiled into firmware (`config.h`).
 
 ### 3. Firmware
 
@@ -96,7 +110,7 @@ Configure secrets, then build/flash.
 
 ```bash
 cp firmware/include/config.h.example firmware/include/config.h
-# edit config.h: WIFI_SSID, WIFI_PASSWORD, DEVICE_PSK, API_ENDPOINT_URL, POLL_COMMANDS_ENDPOINT_URL
+# edit config.h: WIFI_SSID, WIFI_PASSWORD, DEVICE_PSK, API_ENDPOINT_URL
 
 ~/.platformio/penv/bin/pio run -e esp32-s3-n16r8 -t upload
 ~/.platformio/penv/bin/pio device monitor -e esp32-s3-n16r8 -f send_on_enter
@@ -117,12 +131,23 @@ cp firmware/include/config.h.example firmware/include/config.h
 
 ## Card Encoding
 
-Student cards are provisioned **before** they're ever tapped on a terminal, using `tools/encode_card.py` on a desktop with a USB NFC reader (ACR122U or PN532). It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1–7 (blocks 4–30, excluding trailers) with the factory-default key — 336 bytes total.
+Cards are provisioned from the dashboard's **Encode Card** page. It writes raw JSON (school_id, first_name, last_name), null-padded, across MIFARE Classic 1K sectors 1–7 (blocks 4–30, excluding trailers) with the factory-default key — 336 bytes total.
 
-See **[`docs/card-encoding.md`](docs/card-encoding.md)** for the full layout, hardware requirements, and single/bulk encoding instructions.
+The page talks over HTTP to a reader exposing `GET /health` and `POST /encode`. Two deployments satisfy that:
+
+| Target | `VITE_ENCODER_URL` | Notes |
+|---|---|---|
+| **ESP32 terminal** (recommended) | `http://<device-ip>:8787` | The terminal serves both endpoints itself (`firmware/src/encode_server.cpp`); nothing runs on the desktop. Its IP is printed to Serial at boot. |
+| PC + USB reader | `http://localhost:8787` (default) | `python tools/encoder_server.py` |
+
+Because the Pages site is HTTPS and the reader is on the private LAN, the reader must answer the CORS preflight with `Access-Control-Allow-Private-Network: true` — both implementations do.
+
+The student record itself is created on the **first tap** of the encoded card while the room is in `enroll` mode (see *How a Tap Flows*), so no separate registration step is needed.
+
+See **[`docs/card-encoding.md`](docs/card-encoding.md)** for the full on-card layout and hardware requirements.
 
 ```bash
-pip install nfcpy
+pip install nfcpy   # only needed for the PC + USB reader path
 python tools/encode_card.py --school-id 25-1809-52 --first-name "Doe" --last-name "Jane"
 ```
 
@@ -134,7 +159,10 @@ The firmware's `nfcReadData()` authenticates with a multi-key probe and scans fo
 2. `nfcReadData()` reads the student JSON + UID from the card.
 3. The firmware signs `MAC + Timestamp + NFC_UID` with `DEVICE_PSK` (HMAC-SHA256).
 4. It POSTs the signed payload to `ingest-tap`.
-5. The Edge Function verifies the signature, looks up the active session for the device, finds/creates the student, and inserts an `attendance_logs` row.
+5. The Edge Function verifies the signature, derives the room from the device MAC, and checks the room's mode:
+   - **attend** — finds the student's active enrollment, computes Present/Late from the session's schedule, and updates the pre-generated `attendance` row.
+   - **enroll** — creates the Student + Card + Enrollment from the on-card payload.
+   - **no mode** — logs the tap as `no_active_mode`.
 6. The dashboard's realtime subscription updates the roster.
 
 ## Documentation

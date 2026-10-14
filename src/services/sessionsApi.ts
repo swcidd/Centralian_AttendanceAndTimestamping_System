@@ -6,8 +6,8 @@ export type SessionMode = "ACTIVE_ATTENDANCE" | "REGISTRATION";
 export interface ActiveSession {
   sessionId: string | null;
   stubCode: string;
-  /** The room the mode is anchored to (room_modes.room). */
-  deviceMac: string;
+  /** The room the open mode is anchored to (room_modes.room). */
+  room: string;
   status: SessionMode;
 }
 
@@ -59,7 +59,7 @@ export async function getActiveSession(
   return {
     sessionId: (data.session_id as string | null) ?? null,
     stubCode: section.code,
-    deviceMac: data.room as string,
+    room: data.room as string,
     status: DB_TO_MODE[data.mode as DbRoomMode],
   };
 }
@@ -79,11 +79,11 @@ export async function startSession(
 
 export async function closeSession(
   sessionId: string | null,
-  deviceMac: string
+  room: string | null
 ): Promise<void> {
   await invokeRoomAction({
     action: "close_session",
     session_id: sessionId,
-    device_id: deviceMac,
+    room,
   });
 }

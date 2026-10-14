@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { CgArrowLeft } from "react-icons/cg";
+import { CgArrowLeft, CgUser } from "react-icons/cg";
 
 import { fetchSessionRoster } from "../services/attendanceApi";
 import { getErrorMessage } from "../lib/errors";
 import type { StudentStatus } from "../types/types";
+
+const TYPE_LABEL: Record<string, string> = {
+  lect: "Lecture",
+  lab: "Laboratory",
+};
 
 const StubcodeMasterlistPage = () => {
   const { courseId, sectionKey } = useParams<{
@@ -18,10 +23,12 @@ const StubcodeMasterlistPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [code, type] = sectionKey?.split("|") ?? [];
+  const typeLabel = TYPE_LABEL[type ?? ""] ?? type ?? "";
+
   useEffect(() => {
     if (!sectionKey) return;
 
-    const [code, type] = sectionKey.split("|");
     if (!code || (type !== "lect" && type !== "lab")) {
       setError("Invalid stubcode.");
       setLoading(false);
@@ -35,7 +42,7 @@ const StubcodeMasterlistPage = () => {
         setError(getErrorMessage(err, "Failed to load masterlist."))
       )
       .finally(() => setLoading(false));
-  }, [sectionKey]);
+  }, [sectionKey, code, type]);
 
   return (
     <div className="bg-cream min-h-screen p-6">
@@ -43,22 +50,37 @@ const StubcodeMasterlistPage = () => {
         onClick={() =>
           courseId ? navigate(`/courses/${courseId}`) : navigate("/courses")
         }
-        className="text-orange mb-4 inline-flex items-center gap-1 text-sm font-medium hover:underline"
+        className="text-orange mb-5 inline-flex items-center gap-1.5 text-sm font-semibold transition hover:underline"
       >
-        <CgArrowLeft /> Back
+        <CgArrowLeft /> Back to course
       </button>
 
       <div className="mx-auto max-w-3xl">
-        <div className="border-tan rounded-xl border bg-white p-6 shadow-sm">
-          <h1 className="text-navy text-2xl font-bold">
-            Masterlist — Stubcode {sectionKey?.replace("|", " · ")}
-          </h1>
-          <p className="text-navy/60 mt-1 text-sm">
-            {students.length} enrolled student{students.length === 1 ? "" : "s"}
-          </p>
+        {/* Header */}
+        <div className="border-tan rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="bg-orange/10 text-orange flex h-12 w-12 items-center justify-center rounded-xl font-mono text-lg font-bold">
+              {code}
+            </div>
+            <div>
+              <h1 className="text-navy text-2xl font-bold tracking-tight">
+                Masterlist
+              </h1>
+              <p className="text-navy/60 mt-0.5 text-sm font-medium">
+                {typeLabel} · Stubcode {code}
+              </p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-navy text-3xl font-bold">{students.length}</p>
+              <p className="text-navy/50 text-xs font-medium uppercase tracking-wide">
+                Enrolled
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="border-tan mt-6 rounded-xl border bg-white shadow-sm">
+        {/* Student list */}
+        <div className="border-tan mt-5 overflow-hidden rounded-2xl border bg-white shadow-sm">
           {error && (
             <p className="border-b border-tan bg-red-50 px-6 py-3 text-sm text-red-600">
               {error}
@@ -66,24 +88,35 @@ const StubcodeMasterlistPage = () => {
           )}
 
           {loading ? (
-            <p className="text-navy/60 px-6 py-8 text-center text-sm">
-              Loading...
-            </p>
+            <div className="flex flex-col items-center gap-3 px-6 py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange border-t-transparent" />
+              <p className="text-navy/50 text-sm">Loading masterlist...</p>
+            </div>
           ) : students.length === 0 ? (
-            <p className="text-navy/40 px-6 py-8 text-center text-sm">
-              No students enrolled in this stubcode yet.
-            </p>
+            <div className="flex flex-col items-center gap-3 px-6 py-16">
+              <div className="bg-orange/10 text-orange flex h-14 w-14 items-center justify-center rounded-full">
+                <CgUser className="h-7 w-7" />
+              </div>
+              <p className="text-navy font-medium">No students yet</p>
+              <p className="text-navy/50 text-center text-sm">
+                Students will appear here once they tap their cards in
+                registration mode.
+              </p>
+            </div>
           ) : (
             <ul className="divide-y divide-tan">
               {students.map((student, i) => (
                 <li
                   key={student.id}
-                  className="flex items-center gap-4 px-6 py-3"
+                  className="group flex items-center gap-4 px-6 py-3.5 transition hover:bg-cream"
                 >
-                  <span className="text-navy/40 w-8 text-right font-mono text-sm">
-                    {i + 1}
+                  <span className="text-navy/30 w-7 text-right font-mono text-xs font-medium">
+                    {String(i + 1).padStart(2, "0")}
                   </span>
-                  <span className="text-navy flex-1 text-sm font-medium">
+                  <div className="bg-orange/10 text-orange flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
+                    <CgUser className="h-4 w-4" />
+                  </div>
+                  <span className="text-navy group-hover:text-orange flex-1 text-sm font-medium transition">
                     {student.name}
                   </span>
                 </li>

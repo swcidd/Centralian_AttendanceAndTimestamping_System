@@ -15,7 +15,6 @@ const CourseGrid = ({ courses, onOpenCourse, onDelete }: CourseGridProps) => {
           key={course.courseId}
           sections={course.sections}
           name={course.name}
-          schedule={course.schedule}
           instructor={course.instructor}
           deviceMac={course.deviceMac}
           roomName={course.roomName}

@@ -3,7 +3,6 @@ import type { CourseSection } from "../../types/types";
 interface CourseCardProps {
   sections: CourseSection[];
   name: string;
-  schedule: string;
   instructor: string;
   deviceMac: string | null;
   roomName: string | null;
@@ -14,7 +13,6 @@ interface CourseCardProps {
 const CourseCard = ({
   sections,
   name,
-  schedule,
   instructor,
   deviceMac,
   roomName,
@@ -47,11 +45,6 @@ const CourseCard = ({
       <h3 className="text-navy mt-2 text-lg font-semibold">{name}</h3>
 
       <div className="mt-4 space-y-3 text-sm">
-        <div>
-          <p className="text-navy font-medium">Schedule</p>
-          <p className="text-navy/60 mt-1">{schedule}</p>
-        </div>
-
         <div>
           <p className="text-navy font-medium">Instructor</p>
           <p className="text-navy/60 mt-1">{instructor}</p>

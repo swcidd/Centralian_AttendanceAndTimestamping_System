@@ -210,8 +210,14 @@ Deno.serve(async (req) => {
         .eq("session_date", sessionDate)
         .maybeSingle();
 
+      // One session per slot per day (unique constraint). If today's session
+      // was closed, reopen it so the instructor can resume scanning after
+      // stopping; reusing the row keeps the taps already recorded.
       if (existingSession?.closed_at) {
-        return json({ error: "today's session for this slot is already closed" }, 409);
+        await admin
+          .from("class_sessions")
+          .update({ closed_at: null })
+          .eq("session_id", existingSession.session_id);
       }
 
       let sessionId = (existingSession?.session_id as string | undefined) ?? null;

@@ -4,6 +4,7 @@ import StudentTrackRow from "./StudentTrackRow";
 import StudentTrackDetails from "./StudentTrackDetails";
 
 import { fetchStudentAttendanceRollup } from "../../services/attendanceApi";
+import { instructorOwnsAnyStubcode } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
 import { StudentAttendance } from "../../types/types";
 
@@ -12,14 +13,37 @@ const StudentTrackTable = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] =
     useState<StudentAttendance | null>(null);
+  // The summary is a global rollup of every student, so only an instructor
+  // who owns a section may see it. Hidden until that check passes.
+  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    fetchStudentAttendanceRollup()
-      .then(setStudents)
-      .catch((err: unknown) =>
-        setError(getErrorMessage(err, "Failed to load student attendance."))
-      );
+    let cancelled = false;
+    instructorOwnsAnyStubcode()
+      .then((owns) => {
+        if (cancelled || !owns) return;
+        setAuthorized(true);
+        return fetchStudentAttendanceRollup()
+          .then((data) => {
+            if (!cancelled) setStudents(data);
+          })
+          .catch((err: unknown) => {
+            if (!cancelled)
+              setError(
+                getErrorMessage(err, "Failed to load student attendance.")
+              );
+          });
+      })
+      .catch(() => {
+        // A failed ownership check means "not authorized" — stay hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Hidden from any user who does not own a stubcode.
+  if (!authorized) return null;
 
   return (
     <>

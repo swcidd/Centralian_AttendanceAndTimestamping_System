@@ -560,6 +560,20 @@ export async function countAttendance(
   return total;
 }
 
+// Whether the signed-in instructor owns at least one section. The Student
+// Attendance Summary is a global rollup of every student, so it is only shown
+// to an instructor who actually owns a section.
+export async function instructorOwnsAnyStubcode(): Promise<boolean> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return false;
+  const { count, error } = await supabase
+    .from("stubcodes")
+    .select("course_stubcode", { count: "exact", head: true })
+    .eq("instructor_id", userData.user.id);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 // Deletes one section from a course. Everything keyed beneath it —
 // roster, schedules, sessions, room modes, and attendance — goes with it
 // via the FK cascades; the UI confirms the record count first. A course

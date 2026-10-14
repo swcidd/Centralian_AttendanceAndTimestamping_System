@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { CgClose, CgArrowLeft, CgChevronRight } from "react-icons/cg";
+import { CgClose, CgArrowLeft, CgChevronRight, CgPen } from "react-icons/cg";
 
 import AddStubcodeModal from "../components/courses/AddStubcodeModal";
-import AssignTerminalModal from "../components/courses/AssignTerminalModal";
+import ConfirmDialog from "../components/courses/ConfirmDialog";
+import EditStubcodeModal, {
+  type ScheduleInput,
+  type TerminalInput,
+} from "../components/courses/EditStubcodeModal";
 
 import {
-  countAttendance,
   deleteCourse,
   deleteStubcode,
   fetchCourse,
+  updateStubcodeSchedule,
+  updateStubcodeTerminal,
 } from "../services/coursesApi";
 import { getErrorMessage } from "../lib/errors";
 import {
@@ -32,8 +37,12 @@ const CourseDetailPage = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [assignOpen, setAssignOpen] = useState(false);
   const [addStubOpen, setAddStubOpen] = useState(false);
+  const [editStub, setEditStub] = useState<CourseSection | null>(null);
+  const [confirmDeleteStub, setConfirmDeleteStub] = useState<CourseSection | null>(
+    null
+  );
+  const [confirmDeleteCourse, setConfirmDeleteCourse] = useState(false);
 
   const loadCourse = useCallback(() => {
     if (!courseId) return;
@@ -52,24 +61,12 @@ const CourseDetailPage = () => {
 
   useEffect(loadCourse, [loadCourse]);
 
-  const handleDeleteStub = async (section: CourseSection) => {
-    if (!course) return;
-
+  const handleDeleteStub = async () => {
+    if (!confirmDeleteStub) return;
+    const section = confirmDeleteStub;
+    setConfirmDeleteStub(null);
     setError(null);
 
-    let attendance: number;
-    try {
-      attendance = await countAttendance([section]);
-    } catch (err) {
-      setError(
-        getErrorMessage(err, "Failed to check this stubcode's attendance records.")
-      );
-      return;
-    }
-
-    if (!window.confirm(stubDeleteConfirm(sectionLabel(section), attendance))) {
-      return;
-    }
     try {
       await deleteStubcode(section);
       loadCourse();
@@ -80,27 +77,28 @@ const CourseDetailPage = () => {
 
   const handleDeleteCourse = async () => {
     if (!course) return;
+    setConfirmDeleteCourse(false);
     setError(null);
 
-    let attendance = 0;
-    try {
-      attendance = await countAttendance(course.sections);
-    } catch (err) {
-      setError(
-        getErrorMessage(err, "Failed to check this course's attendance records.")
-      );
-      return;
-    }
-
-    if (!window.confirm(courseDeleteConfirm(course.name, attendance))) {
-      return;
-    }
     try {
       await deleteCourse(course.courseId);
       navigate("/courses");
     } catch (err) {
       setError(getErrorMessage(err, "Failed to delete course."));
     }
+  };
+
+  const handleSaveStub = async (
+    section: CourseSection,
+    schedule: ScheduleInput,
+    terminal: TerminalInput
+  ) => {
+    setError(null);
+    // Apply schedule and terminal independently so an operator can edit
+    // one without touching the other.
+    await updateStubcodeSchedule(section, schedule);
+    await updateStubcodeTerminal(section, terminal.deviceMac, terminal.roomName);
+    loadCourse();
   };
 
   if (notFound) {
@@ -142,45 +140,16 @@ const CourseDetailPage = () => {
               <p className="text-navy/60 mt-1 text-sm">{course.schedule}</p>
             </div>
             <button
-              onClick={handleDeleteCourse}
+              onClick={() => setConfirmDeleteCourse(true)}
               className="rounded-md px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50"
             >
               Delete course
             </button>
           </div>
 
-          <div className="mt-5 grid gap-4 border-t border-tan pt-5 sm:grid-cols-2">
-            <div>
-              <p className="text-navy text-sm font-medium">Instructor</p>
-              <p className="text-navy/60 mt-1">{course.instructor}</p>
-            </div>
-            <div>
-              <p className="text-navy text-sm font-medium">Terminal</p>
-              {course.deviceMac ? (
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <p className="text-navy/60">
-                    {course.roomName ?? "Assigned"}
-                    <span className="text-navy/40">
-                      {" "}
-                      · <span className="font-mono text-xs">{course.deviceMac}</span>
-                    </span>
-                  </p>
-                  <button
-                    onClick={() => setAssignOpen(true)}
-                    className="text-orange text-xs font-medium transition hover:underline"
-                  >
-                    Change
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setAssignOpen(true)}
-                  className="text-orange mt-1 text-xs font-medium transition hover:underline"
-                >
-                  + Assign terminal
-                </button>
-              )}
-            </div>
+          <div className="mt-5 border-t border-tan pt-5">
+            <p className="text-navy text-sm font-medium">Instructor</p>
+            <p className="text-navy/60 mt-1">{course.instructor}</p>
           </div>
         </div>
 
@@ -212,26 +181,48 @@ const CourseDetailPage = () => {
             <ul className="divide-y divide-tan">
               {course.sections.map((section) => (
                 <li key={sectionKey(section)}>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 px-6 py-4">
+                    {/* Stubcode identity → masterlist */}
                     <button
                       onClick={() =>
                         navigate(
                           `/courses/${course.courseId}/${sectionKey(section)}`
                         )
                       }
-                      className="hover:bg-cream flex flex-1 items-center gap-3 rounded-md px-2 py-2 text-left transition"
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left transition hover:opacity-70"
                       title="View masterlist"
                     >
-                      <span className="bg-orange/10 text-orange inline-flex items-center rounded-md px-2.5 py-1 font-mono text-sm font-medium">
+                      <span className="bg-orange/10 text-orange inline-flex shrink-0 items-center rounded-md px-2.5 py-1 font-mono text-sm font-medium">
                         {section.code}
                       </span>
-                      <span className="text-navy/50 text-xs font-semibold uppercase">
+                      <span className="text-navy/50 shrink-0 text-xs font-semibold uppercase">
                         {TYPE_LABEL[section.type] ?? section.type}
                       </span>
                       <CgChevronRight className="text-navy/30 ml-auto shrink-0" />
                     </button>
+
+                    {/* Per-stubcode schedule + terminal */}
+                    <div className="hidden min-w-0 flex-1 sm:block">
+                      <p className="text-navy/70 truncate text-sm">
+                        {section.schedule}
+                      </p>
+                      <p className="text-navy/40 truncate text-xs">
+                        {section.roomName
+                          ? `${section.roomName} · ${section.deviceMac ?? ""}`
+                          : "No terminal"}
+                      </p>
+                    </div>
+
                     <button
-                      onClick={() => handleDeleteStub(section)}
+                      onClick={() => setEditStub(section)}
+                      aria-label={`Edit stubcode ${sectionLabel(section)}`}
+                      title="Edit schedule & terminal"
+                      className="text-orange/60 shrink-0 transition hover:text-orange"
+                    >
+                      <CgPen />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteStub(section)}
                       aria-label={`Delete stubcode ${sectionLabel(section)}`}
                       title="Delete stubcode"
                       className="text-orange/60 shrink-0 transition hover:text-red-600"
@@ -254,11 +245,34 @@ const CourseDetailPage = () => {
         />
       )}
 
-      {assignOpen && (
-        <AssignTerminalModal
-          course={course}
-          onClose={() => setAssignOpen(false)}
-          onAssigned={loadCourse}
+      {editStub && (
+        <EditStubcodeModal
+          section={editStub}
+          onSave={handleSaveStub}
+          onClose={() => setEditStub(null)}
+        />
+      )}
+
+      {confirmDeleteStub && (
+        <ConfirmDialog
+          title={`Delete stubcode ${sectionLabel(confirmDeleteStub)}?`}
+          message={stubDeleteConfirm(
+            sectionLabel(confirmDeleteStub),
+            0
+          )}
+          confirmLabel="Delete stubcode"
+          onConfirm={handleDeleteStub}
+          onCancel={() => setConfirmDeleteStub(null)}
+        />
+      )}
+
+      {confirmDeleteCourse && (
+        <ConfirmDialog
+          title={`Delete course "${course.name}"?`}
+          message={courseDeleteConfirm(course.name, 0)}
+          confirmLabel="Delete course"
+          onConfirm={handleDeleteCourse}
+          onCancel={() => setConfirmDeleteCourse(false)}
         />
       )}
     </div>

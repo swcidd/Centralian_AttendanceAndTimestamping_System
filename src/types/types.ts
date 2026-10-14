@@ -31,6 +31,12 @@ export type CourseType = "lect" | "lab";
 export interface CourseSection {
   code: string;
   type: CourseType;
+  /** Human-readable schedule line. Optional — populated on detail fetch. */
+  schedule?: string;
+  /** Room this stubcode's terminal is assigned to, if any. */
+  roomName?: string | null;
+  /** MAC of the assigned terminal device, if any. */
+  deviceMac?: string | null;
 }
 
 export interface Course {

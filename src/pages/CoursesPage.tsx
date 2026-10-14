@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import CourseToolbar from "../components/courses/CourseToolbar";
 import CourseGrid from "../components/courses/CourseGrid";
 import StudentTrackTable from "../components/courses/StudentTrackTable";
+import ConfirmDialog from "../components/courses/ConfirmDialog";
 
 import {
   countAttendance,
@@ -20,24 +21,29 @@ const CoursesPage = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<{
+    courseId: string;
+    name: string;
+    attendance: number;
+  } | null>(null);
 
-
-  const loadCourses = () => {
+  const loadCourses = useCallback(() => {
     fetchCourses()
       .then(setCourses)
       .catch((err: unknown) =>
         setError(getErrorMessage(err, "Failed to load courses."))
       );
-  };
+  }, []);
 
-  useEffect(loadCourses, []);
+  useEffect(() => {
+    loadCourses();
+  }, [loadCourses]);
 
-  const handleDelete = async (courseId: string) => {
+  // Count first so the confirmation names exactly what will be dropped.
+  const requestDelete = async (courseId: string) => {
     const course = courses.find((c) => c.courseId === courseId);
     setError(null);
 
-    // Count first so the confirmation names exactly what will be
-    // dropped — the cascade deletes these rows before the course.
     let attendance = 0;
     if (course) {
       try {
@@ -50,10 +56,18 @@ const CoursesPage = () => {
       }
     }
 
-    const label = course ? course.name : "this course";
-    if (!window.confirm(courseDeleteConfirm(label, attendance))) {
-      return;
-    }
+    setPendingDelete({
+      courseId,
+      name: course ? course.name : "this course",
+      attendance,
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    const { courseId } = pendingDelete;
+    setPendingDelete(null);
+
     try {
       await deleteCourse(courseId);
       loadCourses();
@@ -66,7 +80,7 @@ const CoursesPage = () => {
 
   return (
     <div className="bg-cream min-h-screen p-6">
-      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr 420px]">
         <section className="min-w-0">
           <div className="border-tan overflow-hidden rounded-xl border bg-white shadow-sm">
             <CourseToolbar
@@ -81,7 +95,7 @@ const CoursesPage = () => {
               <CourseGrid
                 courses={filteredCourses}
                 onOpenCourse={(courseId) => navigate(`/courses/${courseId}`)}
-                onDelete={handleDelete}
+                onDelete={requestDelete}
               />
             </div>
           </div>
@@ -91,6 +105,18 @@ const CoursesPage = () => {
         </section>
       </div>
 
+      {pendingDelete && (
+        <ConfirmDialog
+          title={`Delete course "${pendingDelete.name}"?`}
+          message={courseDeleteConfirm(
+            pendingDelete.name,
+            pendingDelete.attendance
+          )}
+          confirmLabel="Delete course"
+          onConfirm={handleDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 };

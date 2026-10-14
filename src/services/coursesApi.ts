@@ -122,10 +122,17 @@ export async function fetchCourses(): Promise<Course[]> {
     return {
       courseId: course.course_id,
       sections: stubs
-        .map((stub) => ({
-          code: String(stub.course_stubcode),
-          type: stub.course_type,
-        }))
+        .map((stub) => {
+          const stubSchedules = stub.stubcode_schedules ?? [];
+          const stubRoom = stubSchedules[0]?.schedule_room ?? null;
+          return {
+            code: String(stub.course_stubcode),
+            type: stub.course_type,
+            schedule: formatSchedule(stubSchedules),
+            roomName: stubRoom,
+            deviceMac: stubRoom ? roomToDevice.get(stubRoom) ?? null : null,
+          };
+        })
         .sort(
           (a, b) =>
             a.code.localeCompare(b.code) || a.type.localeCompare(b.type)
@@ -174,10 +181,17 @@ export async function fetchCourse(courseId: string): Promise<Course | null> {
   return {
     courseId: row.course_id,
     sections: stubs
-      .map((stub) => ({
-        code: String(stub.course_stubcode),
-        type: stub.course_type,
-      }))
+      .map((stub) => {
+        const stubSchedules = stub.stubcode_schedules ?? [];
+        const stubRoom = stubSchedules[0]?.schedule_room ?? null;
+        return {
+          code: String(stub.course_stubcode),
+          type: stub.course_type,
+          schedule: formatSchedule(stubSchedules),
+          roomName: stubRoom,
+          deviceMac: stubRoom ? roomToDevice.get(stubRoom) ?? null : null,
+        };
+      })
       .sort(
         (a, b) => a.code.localeCompare(b.code) || a.type.localeCompare(b.type)
       ),
@@ -367,6 +381,75 @@ export async function addStubcode(
       .eq("course_type", input.courseType);
     throw scheduleError;
   }
+}
+
+// Replaces a stubcode's schedule rows (days, start/end, thresholds). The
+// old rows are deleted and re-inserted so the edit is atomic at the UI
+// level — a failed insert leaves the previous schedule intact.
+export async function updateStubcodeSchedule(
+  section: CourseSection,
+  input: Omit<SectionInput, "courseType" | "deviceMac" | "roomName">
+): Promise<void> {
+  const stub = Number(section.code);
+  if (!Number.isInteger(stub)) {
+    throw new Error(`Stub code "${section.code}" must be a number.`);
+  }
+
+  // Read the current room before deleting so the re-insert preserves it.
+  const { data: existingRows } = await supabase
+    .from("stubcode_schedules")
+    .select("schedule_room")
+    .eq("course_stubcode", stub)
+    .eq("course_type", section.type)
+    .limit(1);
+  const currentRoom = existingRows?.[0]?.schedule_room ?? "";
+
+  const { error: deleteError } = await supabase
+    .from("stubcode_schedules")
+    .delete()
+    .eq("course_stubcode", stub)
+    .eq("course_type", section.type);
+  if (deleteError) throw deleteError;
+
+  await insertSchedules(
+    stub,
+    section.type,
+    currentRoom,
+    input.daysOfWeek,
+    input.startTime,
+    input.endTime,
+    input.lateAfterMinutes,
+    input.absentAfterMinutes
+  );
+}
+
+// Points a stubcode's schedule rows at a new room (terminal). The room is
+// the only terminal-linked field on stubcode_schedules; the device itself
+// lives in the `devices` registry.
+export async function updateStubcodeTerminal(
+  section: CourseSection,
+  deviceMac: string | null,
+  roomName: string | null
+): Promise<void> {
+  if (deviceMac && !roomName) {
+    throw new Error("Room name is required when assigning a terminal.");
+  }
+  if (deviceMac && roomName) {
+    await upsertDevice(deviceMac, roomName);
+  }
+
+  const stub = Number(section.code);
+  if (!Number.isInteger(stub)) {
+    throw new Error(`Stub code "${section.code}" must be a number.`);
+  }
+
+  const { error } = await supabase
+    .from("stubcode_schedules")
+    .update({ schedule_room: roomName ?? "TBD" })
+    .eq("course_stubcode", stub)
+    .eq("course_type", section.type);
+
+  if (error) throw error;
 }
 
 export async function createCourse(input: NewCourseInput) {

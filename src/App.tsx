@@ -9,6 +9,7 @@ import ActivityPage from "./pages/ActivityPage";
 import TrackingPage from "./pages/TrackingPage";
 import CoursesPage from "./pages/CoursesPage";
 import CourseDetailPage from "./pages/CourseDetailPage";
+import StubcodeMasterlistPage from "./pages/StubcodeMasterlistPage";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/:courseId" element={<CourseDetailPage />} />
+          <Route path="/courses/:courseId/:sectionKey" element={<StubcodeMasterlistPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

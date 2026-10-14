@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { CgClose, CgArrowLeft } from "react-icons/cg";
+import { CgClose, CgArrowLeft, CgChevronRight } from "react-icons/cg";
 
 import AddStubcodeModal from "../components/courses/AddStubcodeModal";
 import AssignTerminalModal from "../components/courses/AssignTerminalModal";
@@ -220,26 +220,34 @@ const CourseDetailPage = () => {
           ) : (
             <ul className="divide-y divide-tan">
               {course.sections.map((section) => (
-                <li
-                  key={sectionKey(section)}
-                  className="flex items-center justify-between gap-4 px-6 py-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="bg-orange/10 text-orange inline-flex items-center rounded-md px-2.5 py-1 font-mono text-sm font-medium">
-                      {section.code}
-                    </span>
-                    <span className="text-navy/50 text-xs font-semibold uppercase">
-                      {TYPE_LABEL[section.type] ?? section.type}
-                    </span>
+                <li key={sectionKey(section)}>
+                  <div className="flex items-center justify-between gap-4">
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/courses/${course.courseId}/${sectionKey(section)}`
+                        )
+                      }
+                      className="hover:bg-cream flex flex-1 items-center gap-3 rounded-md px-2 py-2 text-left transition"
+                      title="View masterlist"
+                    >
+                      <span className="bg-orange/10 text-orange inline-flex items-center rounded-md px-2.5 py-1 font-mono text-sm font-medium">
+                        {section.code}
+                      </span>
+                      <span className="text-navy/50 text-xs font-semibold uppercase">
+                        {TYPE_LABEL[section.type] ?? section.type}
+                      </span>
+                      <CgChevronRight className="text-navy/30 ml-auto shrink-0" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStub(section)}
+                      aria-label={`Delete stubcode ${sectionLabel(section)}`}
+                      title="Delete stubcode"
+                      className="text-orange/60 shrink-0 transition hover:text-red-600"
+                    >
+                      <CgClose />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleDeleteStub(section)}
-                    aria-label={`Delete stubcode ${sectionLabel(section)}`}
-                    title="Delete stubcode"
-                    className="text-orange/60 transition hover:text-red-600"
-                  >
-                    <CgClose />
-                  </button>
                 </li>
               ))}
             </ul>

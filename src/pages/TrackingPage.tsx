@@ -5,12 +5,20 @@ import TrackingTable from "../components/tracking/TrackingTable";
 import TrackingButton from "../components/tracking/TrackingButton";
 
 import { getActiveSession, type ActiveSession } from "../services/sessionsApi";
-import { DB_STATUS_TO_UI, fetchSessionRoster } from "../services/attendanceApi";
+import { fetchSessionRoster } from "../services/attendanceApi";
 import { useRealtimeAttendance } from "../hooks/useRealtimeAttendance";
 import { supabase } from "../lib/supabase";
 import { attendanceReducer, type RosterState } from "../lib/utils/attendanceReducer";
 
 import type { Course, StudentStatus } from "../types/types";
+
+// Local copy of the DB→UI status map. attendanceApi's `DB_STATUS_TO_UI`
+// export was dropped in the schema refactor; the mapping is unchanged.
+const DB_STATUS_TO_UI = {
+  PRESENT: "Present",
+  LATE: "Late",
+  ABSENT: "Absent",
+} as const;
 
 const TrackingPage = () => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);

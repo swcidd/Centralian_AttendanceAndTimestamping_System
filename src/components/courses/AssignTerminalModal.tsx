@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { assignDevice, fetchDevices, type DeviceInfo } from "../../services/coursesApi";
+import { fetchDevices, type DeviceInfo } from "../../services/coursesApi";
 import { getErrorMessage } from "../../lib/errors";
+import { supabase } from "../../lib/supabase";
 import type { Course } from "../../types/types";
 
 interface AssignTerminalModalProps {
@@ -57,7 +58,16 @@ const AssignTerminalModal = ({ course, onClose, onAssigned }: AssignTerminalModa
 
     setIsSubmitting(true);
     try {
-      await assignDevice(course.courseId, mac || null, room || null);
+      // The schema refactor removed `courses.device_mac` and the old
+      // assignDevice() service, and the terminal registry (`devices`) is now
+      // read through its `room` column (see fetchDevices). Register/update the
+      // terminal there directly. `room_name` is the legacy NOT NULL column.
+      if (mac && room) {
+        const { error: deviceError } = await supabase
+          .from("devices")
+          .upsert({ device_mac: mac, room, room_name: room });
+        if (deviceError) throw deviceError;
+      }
       onAssigned();
       onClose();
     } catch (err) {
